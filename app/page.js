@@ -8,7 +8,7 @@ import { useSelector } from "react-redux";
 
 export default function Page() {
   const tab = useSelector((state) => state.activeTab).activeTab;
-  const ActiveTav = [<Home />, <div>Hello</div>];
+  const ActiveTav = [<Home />, <div>Hello World</div>];
 
   return (
     <SidebarProvider
