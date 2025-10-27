@@ -9,15 +9,16 @@ import { fetchMoviesBanner } from "@/redux/slice/movie";
 import { useSidebar } from "@/components/ui/sidebar";
 import Background from "@/store/Rectangle.svg";
 import CircleProgess from "@/components/CircleProgess";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function Slider() {
   const { open } = useSidebar();
+  const isMobile = useIsMobile();
   const dispatch = useDispatch();
   const { data, status, error } = useSelector((state) => state.movie);
   useEffect(() => {
     dispatch(fetchMoviesBanner());
   }, []);
-  console.log(data);
   return (
     <Swiper
       modules={[Autoplay]}
@@ -30,10 +31,12 @@ function Slider() {
         disableOnInteraction: false,
       }}
       className={`${
-        open
+        isMobile
+          ? "w-[100%] !h-[40vh] mb-6 "
+          : open
           ? "w-[calc(98vw_-_var(--sidebar-width))] left-2"
           : "w-[calc(97.5vw)] left-3"
-      } h-[65vh] rounded-2xl absolute  top-2 `}
+      } h-[65vh] rounded-2xl absolute top-2  `}
     >
       {status === "loading" ||
         status === "none" ||
@@ -54,17 +57,21 @@ function Slider() {
               alt="Background"
               className="w-full absolute object-cover object-bottom-left h-full"
             />
-            <div className="absolute z-20 bottom-15 left-15  ">
-              <h3 className={`text-[1.45rem] font-extrabold text-white`}>
+            <div
+              className={`absolute z-20 ${
+                isMobile ? "w-[100%] bottom-2 left-5 " : " bottom-12 left-10"
+              }   `}
+            >
+              <h3 className={`text-heading ${isMobile ? "w-[40vw]" : "w-full"} font-extrabold text-white`}>
                 {movie.title || movie.original_title}
               </h3>
-              <p className=" w-[30vw] line-clamp-2 text-white">
+              <p className={` ${isMobile ? "w-[50vw]" : "w-[30vw]"} text-subheading line-clamp-2 text-white`}>
                 {movie.overview}
               </p>
               <div className=" flex justify-start items-end gap-2 mt-4">
                 <div className="">
                   <CircleProgess progress={movie.vote_average} />
-                  <p className="px-2">{"IMDB "}</p>
+                  <p className="px-2">{"IMDB"}</p>
                 </div>
                 <div>
                   <div className="flex justify-center gap-2">

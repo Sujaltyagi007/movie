@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function ThemeBtn() {
   const { setTheme } = useTheme();
@@ -38,8 +39,13 @@ function ThemeBtn() {
 }
 
 export function SiteHeader() {
+  const isMobile = useIsMobile();
   return (
-    <header className="flex h-(--header-height) mt-2 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) relative z-10 ">
+    <header
+      className={`flex h-(--header-height) ${
+        isMobile && "mt-0 "
+      } mt-2 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height) relative z-10 `}
+    >
       <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
         <SidebarTrigger className="-ml-1 " />
         <Separator

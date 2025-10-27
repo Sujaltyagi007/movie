@@ -32,7 +32,7 @@ export default function Home() {
   }, [dispatch, topRatedStatus, popularStatus]);
 
   return (
-    <div className="absolute ">
+    <div className="absolute w-[100%] ">
       <Banner />
       <MovieCard
         data={{

@@ -8,7 +8,18 @@ import { useSelector } from "react-redux";
 
 export default function Page() {
   const tab = useSelector((state) => state.activeTab).activeTab;
-  const ActiveTav = [<Home />, <div>Hello World</div>];
+  const ActiveTav = [
+    {
+      id: 0,
+      name: "Home",
+      Comp: <Home />,
+    },
+    {
+      id: 2,
+      name: "Contact",
+      Comp: <div>Hello World</div>,
+    },
+  ];
 
   return (
     <SidebarProvider
@@ -18,9 +29,9 @@ export default function Page() {
       }}
     >
       <AppSidebar variant="inset" />
-      <SidebarInset className="!m-0 !mt-2 !rounded-b-none overflow-y-scroll">
+      <SidebarInset className={`!m-0 !mt-2 !rounded-b-none overflow-y-scroll`}>
         <SiteHeader />
-        {ActiveTav[tab]}
+        {ActiveTav[tab].Comp}
       </SidebarInset>
     </SidebarProvider>
   );

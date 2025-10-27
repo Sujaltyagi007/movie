@@ -12,9 +12,6 @@ export default function Page() {
     }
   }, [dispatch, id]);
   const result = useSelector((state) => state.findMovie);
-  console.log("The SelectMovie ID is", id);
-  console.log("The Result is", result);
-
   return (
     <div className="flex justify-center items-center h-dvh">
       {result.status === "loading" && <p>Loading...</p>}
