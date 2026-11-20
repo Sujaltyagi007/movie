@@ -58,8 +58,8 @@ async function MovieDetail({ params }: Pick<PageProps<"/movie/[id]">, "params">)
 
   const actions = publicDomain ? (
     <div className="mt-6 flex flex-wrap items-center gap-3">
-      <VideoPlayButton href="#watch" label="Watch full movie" title={movie.title} mediaId={movie.id} mediaType="movie" />
-      {movie.trailerKey && <TrailerButton videoKey={movie.trailerKey} title={movie.title} variant="glass" />}
+      <VideoPlayButton href="#watch" label="Watch full movie" title={movie.title} mediaId={movie.id} imdbId={movie.imdbId} mediaType="movie" />
+      {movie.trailerKey && <TrailerButton videoKey={movie.trailerKey} trailers={movie.trailers} title={movie.title} variant="glass" />}
     </div>
   ) : undefined;
 
@@ -80,12 +80,13 @@ async function MovieDetail({ params }: Pick<PageProps<"/movie/[id]">, "params">)
               Hosted by Internet Archive <ExternalLink className="size-3.5" />
             </a>
           </div>
-          <MoviePlayer title={movie.title} sources={publicDomain.sources} poster={backdrop} archiveUrl={publicDomain.archiveUrl} durationHintSeconds={publicDomain.durationSeconds} />
+          <MoviePlayer title={movie.title} sources={publicDomain.sources} poster={backdrop} archiveUrl={publicDomain.archiveUrl} durationHintSeconds={publicDomain.durationSeconds}
+            subtitles={publicDomain.subtitles} audioLanguage={publicDomain.audioLanguage || movie.originalLanguage} />
         </section>
       )}
 
       <Overview text={movie.overview} />
-      <WatchProviders watch={movie.watch} />
+      <WatchProviders watch={movie.watch} title={movie.title} originalLanguage={movie.originalLanguage} />
       <CastRow cast={movie.cast} />
       <MediaRow title="More like this" items={movie.related} />
     </Fragment>

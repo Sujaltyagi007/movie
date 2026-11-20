@@ -151,6 +151,14 @@ html:has([data-player-open]) {
   contain: none !important;
 }
 
+/* Subtitles in the movie player: readable on any scene, in the site font. */
+video::cue {
+  font-family: var(--font-sans);
+  background: rgb(0 0 0 / 0.68);
+  color: #fff;
+  line-height: 1.35;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }

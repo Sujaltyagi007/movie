@@ -1,8 +1,7 @@
 "use client";
-
+import { Fragment } from "react/jsx-runtime";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Fragment } from "react/jsx-runtime";
 
 export const NAV_ITEMS = [
   { href: "/", label: "Home", key: "home" },
@@ -30,7 +29,6 @@ const STYLES: Record<Variant, { base: string; active: string; idle: string }> = 
     idle: "text-ink/55 hover:bg-paper/60 hover:text-ink",
   },
   mobile: {
-    // touch:py-3 → 44px-tall tap target (Apple's minimum) on phones.
     base: "shrink-0 whitespace-nowrap border-b-2 px-1 pb-2 text-sm font-medium transition touch:py-3",
     active: "border-ink text-ink",
     idle: "border-transparent text-ink/55",

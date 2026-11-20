@@ -16,8 +16,6 @@ export const metadata: Metadata = {
   description: "Discover trending, top rated and upcoming movies, powered by TMDB.",
 };
 
-// `cover` lets the layout use the full iPhone screen (behind the notch / Dynamic Island and home
-// indicator); the safe-area padding below keeps content out of those areas.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

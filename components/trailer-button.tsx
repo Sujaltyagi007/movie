@@ -1,8 +1,10 @@
 "use client";
 import { flushSync } from "react-dom";
-import { Play, X } from "lucide-react";
+import { Languages, Play, X } from "lucide-react";
+import type { Trailer } from "@/lib/tmdb";
 import { useHeroPlayer } from "@/components/hero-player";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { pickInitialVersion, setPreferredVideoLanguage, VideoLanguageSelect, type VideoVersion } from "@/components/video-language-select";
 
 const VARIANTS = {
   primary: "bg-white text-night shadow-lg hover:bg-white/90",
@@ -13,10 +15,17 @@ type LockableOrientation = ScreenOrientation & { lock?: (orientation: string) =>
 
 const isTouchDevice = () => window.matchMedia("(pointer: coarse)").matches;
 
-const embedUrl = (key: string) => `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
+// `hl` puts YouTube's own player UI (and its caption menu) in the trailer's language.
+const embedUrl = (key: string, language = "") =>
+  `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&rel=0&modestbranding=1&playsinline=1${language ? `&hl=${language}` : ""}`;
 
-export function TrailerButton({ videoKey, title, variant = "primary", className = "" }: {
+const toVersions = (trailers: Trailer[]): VideoVersion[] =>
+  trailers.map((t) => ({ id: t.language || "original", language: t.language, src: embedUrl(t.key, t.language) }));
+
+export function TrailerButton({ videoKey, trailers, title, variant = "primary", className = "" }: {
   videoKey: string;
+  /** The trailer in each available language; the player then offers a language picker. */
+  trailers?: Trailer[];
   title: string;
   variant?: keyof typeof VARIANTS;
   className?: string;
@@ -25,10 +34,21 @@ export function TrailerButton({ videoKey, title, variant = "primary", className 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const wentFullscreen = useRef(false);
   const hero = useHeroPlayer();
+  const versions = trailers?.length ? toVersions(trailers) : [{ id: "default", language: "", src: embedUrl(videoKey) }];
+  const [versionId, setVersionId] = useState<string | null>(null);
+  const current = versions.find((v) => v.id === versionId) ?? versions[0];
+
+  function chooseVersion(version: VideoVersion) {
+    setVersionId(version.id);
+    if (version.language) setPreferredVideoLanguage(version.language);
+  }
 
   function openPlayer() {
+    // Start in the language the user picked last time, when this title has it.
+    const initial = pickInitialVersion(versions) ?? versions[0];
+    setVersionId(initial.id);
     if (hero) {
-      hero.play({ src: embedUrl(videoKey), label: "Trailer" });
+      hero.play({ src: initial.src, label: "Trailer", versions, versionId: initial.id, onVersionChange: chooseVersion });
       return;
     }
     const dialog = dialogRef.current;
@@ -70,6 +90,11 @@ export function TrailerButton({ videoKey, title, variant = "primary", className 
     <Fragment>
       <button type="button" onClick={openPlayer} className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition ${VARIANTS[variant]} ${className}`}      >
         <Play className="size-4 fill-current" /> Watch trailer
+        {versions.length > 1 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-current/10 px-2 py-0.5 text-[11px] font-medium" title={`Trailer available in ${versions.length} languages`}>
+            <Languages className="size-3" /> {versions.length}
+          </span>
+        )}
       </button>
 
       <dialog ref={dialogRef} aria-label={`${title} trailer`} onClose={() => (open ? closePlayer() : undefined)} onClick={(e) => { if (e.target === e.currentTarget) closePlayer(); }}
@@ -90,13 +115,14 @@ export function TrailerButton({ videoKey, title, variant = "primary", className 
                 <span className="text-white/50">Trailer · </span>
                 {title}
               </p>
+              <VideoLanguageSelect versions={versions} value={current.id} onChange={chooseVersion} className="pointer-events-auto ml-auto shrink-0" />
               <button type="button" onClick={closePlayer} aria-label="Close trailer" autoFocus className="pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25 backdrop-blur transition hover:bg-white/30 touch:size-11" >
                 <X className="size-5" />
               </button>
             </div>
 
             <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/10 touch:w-[min(100vw,calc(100dvh*16/9))] touch:rounded-none touch:shadow-none touch:ring-0">
-              <iframe src={embedUrl(videoKey)} title={`${title} trailer`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen className="size-full" />
+              <iframe src={current.src} title={`${title} trailer`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen className="size-full" />
             </div>
           </div>
         )}

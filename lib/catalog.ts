@@ -6,6 +6,8 @@ export type Media = {
   title: string; overview: string;
   rating: number; date: string; genreIds: number[];
   posterPath: string | null; backdropPath: string | null;
+  /** Streaming services in the user's region — only filled in where cards show them (search). */
+  providers?: { id: number; name: string; logoPath: string | null }[];
 };
 
 export const MOVIE_LISTS = {

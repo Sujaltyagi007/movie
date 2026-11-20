@@ -1,10 +1,9 @@
 "use client";
-
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { imageUrl } from "@/lib/catalog";
+import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 
 export type FilterOption = {
   id: number;

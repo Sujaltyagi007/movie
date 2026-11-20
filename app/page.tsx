@@ -1,10 +1,10 @@
-import { Fragment, Suspense } from "react";
 import { Flame } from "lucide-react";
-import { LISTS, type ListKey, type MediaType } from "@/lib/catalog";
-import { discover, getGenres, getList, getProviders, getTrending, type Media } from "@/lib/tmdb";
+import { Fragment, Suspense } from "react";
 import { GenreBrowse } from "@/components/genre-browse";
+import { LISTS, type ListKey, type MediaType } from "@/lib/catalog";
 import { MediaRow, MediaRowSkeleton } from "@/components/media-row";
 import { TrendingBanner, TrendingBannerSkeleton } from "@/components/trending-banner";
+import { discover, getGenres, getList, getProviders, getTrending, type Media } from "@/lib/tmdb";
 
 export default function Home() {
   return (
@@ -15,39 +15,17 @@ export default function Home() {
           <TrendingBanner />
         </Suspense>
       </section>
-      <Row>
-        <TrendingRow />
-      </Row>
-      <Row>
-        <PlatformRow rank={0} />
-      </Row>
-      <Row>
-        <ListRow type="movie" list="top_rated" />
-      </Row>
-      <Row>
-        <PlatformRow rank={1} />
-      </Row>
-      <Row>
-        <ListRow type="tv" list="top_rated" title="Binge-worthy series" />
-      </Row>
-      <Row>
-        <PlatformRow rank={2} />
-      </Row>
-      <Row>
-        <ListRow type="movie" list="now_playing" />
-      </Row>
-      <Row>
-        <ListRow type="tv" list="airing_today" title="New episodes today" />
-      </Row>
-      <Row>
-        <PlatformRow rank={3} />
-      </Row>
-      <Row>
-        <ListRow type="movie" list="upcoming" />
-      </Row>
-      <Suspense fallback={null}>
-        <GenreTiles />
-      </Suspense>
+      <Row> <TrendingRow /> </Row>
+      <Row> <PlatformRow rank={0} /> </Row>
+      <Row> <ListRow type="movie" list="top_rated" /> </Row>
+      <Row> <PlatformRow rank={1} /> </Row>
+      <Row> <ListRow type="tv" list="top_rated" title="Binge-worthy series" /> </Row>
+      <Row> <PlatformRow rank={2} /> </Row>
+      <Row> <ListRow type="movie" list="now_playing" /> </Row>
+      <Row> <ListRow type="tv" list="airing_today" title="New episodes today" /> </Row>
+      <Row> <PlatformRow rank={3} /> </Row>
+      <Row> <ListRow type="movie" list="upcoming" /> </Row>
+      <Suspense fallback={null}> <GenreTiles /> </Suspense>
     </Fragment>
   );
 }
@@ -71,9 +49,7 @@ async function TrendingRow() {
   const items = await safe(() => getTrending("all", "week"));
   if (!items) return null;
   return (
-    <MediaRow title="Trending this week" items={items} showType
-      icon={<Flame className="size-5 shrink-0 text-orange-500" />}
-    />
+    <MediaRow title="Trending this week" items={items} showType icon={<Flame className="size-5 shrink-0 text-orange-500" />} />
   );
 }
 

@@ -8,29 +8,58 @@ type VideoPlayButtonProps = {
   title?: string;
   label?: string;
   mediaId?: number;
+  imdbId?: string | null;
   mediaType?: "movie" | "tv";
+  season?: number;
+  episode?: number;
+  subUrl?: string;
+  subLang?: string;
   [prop: string]: unknown;
 };
 
-async function fetchStreamUrl(mediaId?: number, mediaType?: "movie" | "tv"): Promise<string> {
-  if (!mediaId || !mediaType) throw new Error("Invalid movie or TV show ID.");
-  const response = await fetch(`/api/stream/${mediaId}`);
+type StreamRequest = {
+  mediaId?: number;
+  imdbId?: string | null;
+  mediaType?: "movie" | "tv";
+  season?: number;
+  episode?: number;
+  subUrl?: string;
+  subLang?: string;
+};
+
+async function fetchStreamUrl({ mediaId, imdbId, mediaType, season, episode, subUrl, subLang }: StreamRequest): Promise<string> {
+  const streamId = mediaType === "tv" && imdbId ? imdbId : mediaId;
+  if (!streamId || !mediaType) throw new Error("Invalid movie or TV show ID.");
+
+  const response = await fetch(`/api/stream/${streamId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mediaType,
+      ...(imdbId ? { imdbId } : {}),
+      ...(mediaType === "tv" ? { season: season ?? 1, episode: episode ?? 1 } : {}),
+      ...(subUrl?.trim() ? { sub: subUrl.trim() } : {}),
+      ...(subLang?.trim() ? { subLang: subLang.trim() } : {}),
+    }),
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Failed to load video.");
   if (!data.videoUrl) throw new Error("Video URL not found.");
   return data.videoUrl as string;
 }
 
-export function VideoPlayButton({ title, label, mediaId, mediaType }: VideoPlayButtonProps) {
+export function VideoPlayButton({ title, label, mediaId, imdbId, mediaType, season, episode, subUrl, subLang }: VideoPlayButtonProps) {
   const hero = useHeroPlayer();
   const [isOpen, setIsOpen] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const request: StreamRequest = { mediaId, imdbId, mediaType, season, episode, subUrl, subLang };
+
   const handlePlayVideo = async () => {
     if (hero) {
-      hero.play({ label: "Now playing", load: () => fetchStreamUrl(mediaId, mediaType) });
+      hero.play({ label: "Now playing", load: () => fetchStreamUrl(request) });
       return;
     }
 
@@ -39,7 +68,7 @@ export function VideoPlayButton({ title, label, mediaId, mediaType }: VideoPlayB
     setError("");
     setVideoUrl(null);
     try {
-      setVideoUrl(await fetchStreamUrl(mediaId, mediaType));
+      setVideoUrl(await fetchStreamUrl(request));
     } catch (err) {
       console.error("Video playback error:", err);
       setError(err instanceof Error ? err.message : "Unable to load video.");

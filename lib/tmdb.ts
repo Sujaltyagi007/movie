@@ -59,7 +59,8 @@ async function tmdb<T>(path: string, params: Record<string, string> = {}): Promi
 
 async function orNotFound<T>(id: string, load: () => Promise<T>): Promise<T | null> {
   if (!/^\d+$/.test(id)) return null;
-  try {    return await load();
+  try {
+    return await load();
   } catch (error) {
     if (error instanceof TmdbError && error.status === 404) return null;
     throw error;
@@ -135,7 +136,7 @@ export async function discover(type: MediaType, filters: { genre?: number; provi
   if (filters.provider) {
     params.with_watch_providers = String(filters.provider);
     params.watch_region = REGION;
-    params.with_watch_monetization_types = "flatrate"; // included with subscription
+    params.with_watch_monetization_types = "flatrate";
   }
   return toPage(await tmdb<Page>(`/discover/${type}`, params), type);
 }
@@ -161,8 +162,7 @@ export async function getGenreNames(): Promise<Record<number, string>> {
 
 export type Provider = { id: number; name: string; logoPath: string | null };
 
-const NON_SUBSCRIPTION =
-  /\b(store|channel|amazon video|google play|youtube|fandango|vudu|microsoft|rakuten|justwatch|tubi|pluto|plex|freevee|roku channel)\b/i;
+const NON_SUBSCRIPTION = /\b(store|channel|amazon video|google play|youtube|fandango|vudu|microsoft|rakuten|justwatch|tubi|pluto|plex|freevee|roku channel)\b/i;
 
 export async function getProviders(type: MediaType, limit = 12): Promise<Provider[]> {
   "use cache";
@@ -175,11 +175,91 @@ export async function getProviders(type: MediaType, limit = 12): Promise<Provide
 }
 
 
-type Video = { key: string; site: string; type: string; official: boolean };
+export function serviceName(name: string) {
+  return name.replace(/\s+((standard|basic|premium|essential)\s+)?with ads$/i, "").replace(/\s+(free|premium|essential|basic|standard)$/i, "").trim();
+}
+
+type RegionProviders = Partial<Record<"flatrate" | "free" | "ads", { provider_id: number; provider_name: string; logo_path: string | null; display_priority: number }[]>>;
+
+export async function getStreamingProviders(type: MediaType, id: number): Promise<Provider[]> {
+  "use cache";
+  cacheLife("days");
+  try {
+    const data = await tmdb<{ results: Record<string, RegionProviders> }>(`/${type}/${id}/watch/providers`);
+    const region = data.results?.[REGION];
+    if (!region) return [];
+    const all = [...(region.flatrate ?? []), ...(region.free ?? []), ...(region.ads ?? [])].sort((a, b) => a.display_priority - b.display_priority);
+    const seen = new Set<string>();
+    const out: Provider[] = [];
+    for (const p of all) {
+      if (/\b(amazon|apple tv|roku premium) channel$/i.test(p.provider_name)) continue;
+      const name = serviceName(p.provider_name);
+      if (seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push({ id: p.provider_id, name, logoPath: p.logo_path });
+    }
+    return out;
+  } catch {
+    return []; // Availability is a nice-to-have on result cards; never fail the page over it.
+  }
+}
+
+export async function getTopProviders(limit = 10): Promise<Provider[]> {
+  const [movie, tv] = await Promise.all([getProviders("movie", limit).catch(() => []), getProviders("tv", limit).catch(() => [])]);
+  const byName = new Map<string, Provider>();
+  for (let i = 0; i < Math.max(movie.length, tv.length); i++) {
+    for (const p of [movie[i], tv[i]]) {
+      const name = p && serviceName(p.name);
+      if (p && name && !byName.has(name.toLowerCase())) byName.set(name.toLowerCase(), { ...p, name });
+    }
+  }
+  return [...byName.values()].slice(0, limit);
+}
+
+type Video = { key: string; site: string; type: string; official: boolean; iso_639_1?: string; name?: string };
 
 export function pickTrailer(videos: Video[]): Video | undefined {
   const youtube = videos.filter((v) => v.site === "YouTube");
   return youtube.find((v) => v.type === "Trailer" && v.official) ?? youtube.find((v) => v.type === "Trailer") ?? youtube[0];
+}
+
+export type Trailer = { key: string; language: string; name: string };
+
+const DETAIL_VIDEO_LANGUAGES = "en,null";
+const EXTRA_TRAILER_LANGUAGES = ["hi", "es", "fr", "de", "ja", "ko", "it", "pt", "zh", "ta", "te", "ml", "kn", "bn", "mr", "pa", "ar", "ru", "tr", "th", "id", "pl", "nl", "sv"];
+const VIDEO_LANGUAGES_PER_REQUEST = 5;
+
+async function getExtraLanguageVideos(type: MediaType, id: string): Promise<Video[]> {
+  "use cache";
+  cacheLife("days");
+  const batches: string[][] = [];
+  for (let i = 0; i < EXTRA_TRAILER_LANGUAGES.length; i += VIDEO_LANGUAGES_PER_REQUEST) {
+    batches.push(EXTRA_TRAILER_LANGUAGES.slice(i, i + VIDEO_LANGUAGES_PER_REQUEST));
+  }
+  const results = await Promise.all(batches.map((langs) => tmdb<{ results: Video[] }>(`/${type}/${id}/videos`, { include_video_language: langs.join(",") }).then((r) => r.results).catch(() => [] as Video[])));
+  return results.flat();
+}
+
+function mergeVideos(...lists: Video[][]): Video[] {
+  const byKey = new Map<string, Video>();
+  for (const v of lists.flat()) if (!byKey.has(v.key)) byKey.set(v.key, v);
+  return [...byKey.values()];
+}
+
+const VIDEO_RANK = (v: Video) => (v.type === "Trailer" ? (v.official ? 0 : 1) : v.type === "Teaser" ? (v.official ? 2 : 3) : 9);
+
+export function pickTrailers(videos: Video[], originalLanguage = ""): Trailer[] {
+  const best = new Map<string, Video>();
+  for (const v of videos) {
+    if (v.site !== "YouTube" || VIDEO_RANK(v) === 9) continue;
+    const lang = v.iso_639_1 && v.iso_639_1 !== "xx" ? v.iso_639_1 : "";
+    const current = best.get(lang);
+    if (!current || VIDEO_RANK(v) < VIDEO_RANK(current)) best.set(lang, v);
+  }
+  const order = (lang: string) => (lang === "en" ? 0 : lang === originalLanguage ? 1 : lang === "" ? 3 : 2);
+  return [...best.entries()]
+    .sort(([a], [b]) => order(a) - order(b) || a.localeCompare(b))
+    .map(([language, v]) => ({ key: v.key, language, name: v.name ?? "Trailer" }));
 }
 
 export type CastMember = { id: number; name: string; character: string; profile_path: string | null };
@@ -191,7 +271,16 @@ export type WatchOptions = { link: string | null; stream: Provider[]; rent: Prov
 function toWatchOptions(raw: RawWatch | undefined): WatchOptions | null {
   const region = raw?.results?.[REGION];
   if (!region) return null;
-  const map = (list?: ProviderEntry[]) => (list ?? []).map((p) => ({ id: p.provider_id, name: p.provider_name, logoPath: p.logo_path }));
+  // One entry per service: "Netflix Standard with Ads" folds into "Netflix".
+  const map = (list?: ProviderEntry[]) => {
+    const seen = new Set<string>();
+    return (list ?? []).flatMap((p) => {
+      const name = serviceName(p.provider_name);
+      if (seen.has(name.toLowerCase())) return [];
+      seen.add(name.toLowerCase());
+      return [{ id: p.provider_id, name, logoPath: p.logo_path }];
+    });
+  };
   const options = { link: region.link ?? null, stream: map(region.flatrate), rent: map(region.rent), buy: map(region.buy) };
   return options.stream.length + options.rent.length + options.buy.length ? options : null;
 }
@@ -204,6 +293,7 @@ type RawDetailsBase = {
   backdrop_path: string | null;
   vote_average: number;
   vote_count: number;
+  original_language?: string;
   genres: Genre[];
   credits: { cast: CastMember[] };
   videos: { results: Video[] };
@@ -228,6 +318,11 @@ export type Details = {
   genres: Genre[];
   cast: CastMember[];
   trailerKey: string | null;
+  /** The trailer in every language TMDB has one for (first = default). */
+  trailers: Trailer[];
+  /** ISO 639-1 code of the original audio, e.g. "en", "te" ("" if unknown). */
+  originalLanguage: string;
+  imdbId?: string | null;
   related: Media[];
   watch: WatchOptions | null;
 };
@@ -262,7 +357,9 @@ function toDetails(raw: RawDetailsBase, mediaType: MediaType, title: string, dat
     date,
     genres: raw.genres,
     cast: raw.credits.cast.slice(0, 15),
-    trailerKey: pickTrailer(raw.videos.results)?.key ?? null,
+    trailerKey: pickTrailer(raw.videos.results.filter((v) => !v.iso_639_1 || v.iso_639_1 === "en"))?.key ?? pickTrailer(raw.videos.results)?.key ?? null,
+    trailers: pickTrailers(raw.videos.results, raw.original_language),
+    originalLanguage: raw.original_language ?? "",
     related: (recs.length ? recs : toMediaList(raw.similar.results, mediaType)).filter((m) => m.posterPath).slice(0, 18),
     watch: toWatchOptions(raw["watch/providers"]),
   };
@@ -270,16 +367,21 @@ function toDetails(raw: RawDetailsBase, mediaType: MediaType, title: string, dat
 
 const DETAIL_APPEND = "credits,videos,recommendations,similar,watch/providers";
 
-export type MovieDetails = Details & { mediaType: "movie"; runtime: number | null };
+export type MovieDetails = Details & { mediaType: "movie"; runtime: number | null; imdbId: string | null };
 
 export async function getMovie(id: string): Promise<MovieDetails | null> {
   "use cache";
   cacheLife("days");
   return orNotFound(id, async () => {
-    const raw = await tmdb<RawDetailsBase & { title: string; release_date: string; runtime: number | null; release_dates?: RawReleaseDates }>(`/movie/${id}`, {
-      append_to_response: `${DETAIL_APPEND},release_dates`,
-    });
-    return { ...toDetails(raw, "movie", raw.title, raw.release_date, movieCertification(raw.release_dates)), mediaType: "movie", runtime: raw.runtime };
+    const [raw, extraVideos] = await Promise.all([
+      tmdb<RawDetailsBase & { title: string; release_date: string; runtime: number | null; imdb_id?: string | null; release_dates?: RawReleaseDates }>(`/movie/${id}`, {
+        append_to_response: `${DETAIL_APPEND},release_dates`,
+        include_video_language: DETAIL_VIDEO_LANGUAGES,
+      }),
+      getExtraLanguageVideos("movie", id),
+    ]);
+    raw.videos.results = mergeVideos(raw.videos.results, extraVideos);
+    return { ...toDetails(raw, "movie", raw.title, raw.release_date, movieCertification(raw.release_dates)), mediaType: "movie", runtime: raw.runtime, imdbId: raw.imdb_id ?? null };
   });
 }
 
@@ -287,6 +389,7 @@ export type Season = { id: number; name: string; number: number; episodes: numbe
 
 export type TvDetails = Details & {
   mediaType: "tv";
+  imdbId: string | null;
   status: string;
   lastAirDate: string;
   seasonCount: number;
@@ -301,7 +404,7 @@ export async function getTv(id: string): Promise<TvDetails | null> {
   "use cache";
   cacheLife("days");
   return orNotFound(id, async () => {
-    const raw = await tmdb<
+    const rawRequest = tmdb<
       RawDetailsBase & {
         name: string; first_air_date: string;
         last_air_date: string | null;
@@ -311,11 +414,15 @@ export async function getTv(id: string): Promise<TvDetails | null> {
         created_by: { name: string }[];
         seasons: { id: number; name: string; season_number: number; episode_count: number; air_date: string | null; poster_path: string | null }[];
         content_ratings?: RawContentRatings;
+        external_ids?: { imdb_id?: string | null };
       }
-    >(`/tv/${id}`, { append_to_response: `${DETAIL_APPEND},content_ratings` });
+    >(`/tv/${id}`, { append_to_response: `${DETAIL_APPEND},content_ratings,external_ids`, include_video_language: DETAIL_VIDEO_LANGUAGES });
+    const [raw, extraVideos] = await Promise.all([rawRequest, getExtraLanguageVideos("tv", id)]);
+    raw.videos.results = mergeVideos(raw.videos.results, extraVideos);
     return {
       ...toDetails(raw, "tv", raw.name, raw.first_air_date, tvCertification(raw.content_ratings)),
       mediaType: "tv",
+      imdbId: raw.external_ids?.imdb_id ?? null,
       status: raw.status,
       lastAirDate: raw.last_air_date ?? "",
       seasonCount: raw.number_of_seasons,

@@ -3,8 +3,20 @@
 import { flushSync } from "react-dom";
 import { AlertCircle, LoaderCircle, Maximize, Minimize, RotateCcw, Smartphone, X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { VideoLanguageSelect, type VideoVersion } from "@/components/video-language-select";
 
-export type PlayRequest = { label: string; src?: string; load?: () => Promise<string> };
+/**
+ * Either a ready `src`, or a `load()` that resolves to one (shows a spinner meanwhile).
+ * `versions` (with `src` = the chosen one) adds a language picker to the player.
+ */
+export type PlayRequest = {
+  label: string;
+  src?: string;
+  load?: () => Promise<string>;
+  versions?: VideoVersion[];
+  versionId?: string;
+  onVersionChange?: (version: VideoVersion) => void;
+};
 type HeroPlayer = { play: (request: PlayRequest) => void };
 
 type PlayerState = {
@@ -13,6 +25,9 @@ type PlayerState = {
   status: "loading" | "ready" | "error";
   src: string | null;
   error?: string;
+  versions?: VideoVersion[];
+  versionId?: string;
+  onVersionChange?: (version: VideoVersion) => void;
 };
 
 const HeroPlayerContext = createContext<HeroPlayer | null>(null);
@@ -36,7 +51,10 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
 
   const start = useCallback(async (request: PlayRequest) => {
     if (request.src || !request.load) {
-      setPlaying({ label: request.label, status: request.src ? "ready" : "error", src: request.src ?? null, error: request.src ? undefined : "No video to play." });
+      setPlaying({
+        label: request.label, status: request.src ? "ready" : "error", src: request.src ?? null, error: request.src ? undefined : "No video to play.",
+        versions: request.versions, versionId: request.versionId, onVersionChange: request.onVersionChange,
+      });
       return;
     }
     const load = request.load;
@@ -105,6 +123,12 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [playing, cover, stop]);
+
+  // Switch language in place: same player, same full-screen state, new video source.
+  function switchVersion(version: VideoVersion) {
+    setPlaying((state) => (state ? { ...state, src: version.src, versionId: version.id, status: "ready" } : state));
+    playing?.onVersionChange?.(version);
+  }
 
   function toggleFullscreen() {
     if (document.fullscreenElement) {
@@ -182,6 +206,15 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
             <p className="pointer-events-none absolute inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] hidden items-center justify-center gap-2 text-xs text-white/55 touch:portrait:flex">
               <Smartphone className="size-4 rotate-90" strokeWidth={1.75} /> Turn your phone sideways for a bigger picture
             </p>
+          )}
+
+          {playing.status === "ready" && playing.versions && playing.versions.length > 1 && (
+            <VideoLanguageSelect
+              versions={playing.versions}
+              value={playing.versionId ?? playing.versions[0].id}
+              onChange={switchVersion}
+              className="absolute left-[max(0.75rem,env(safe-area-inset-left))] top-[max(0.75rem,env(safe-area-inset-top))] z-10"
+            />
           )}
 
           <div className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex gap-2">

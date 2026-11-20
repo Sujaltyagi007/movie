@@ -1,11 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
-import { imageUrl, releaseYear } from "@/lib/catalog";
-import { ArrowLeft, ExternalLink, Star, UserRound } from "lucide-react";
-import { TrailerButton } from "@/components/trailer-button";
 import { HeroStage } from "@/components/hero-player";
+import { imageUrl, releaseYear } from "@/lib/catalog";
+import { TrailerButton } from "@/components/trailer-button";
 import { VideoPlayButton } from "@/components/VideoPlayButton";
+import { ArrowLeft, ExternalLink, Languages, Star, UserRound } from "lucide-react";
+import { serviceLink } from "@/lib/services";
+import { languageLabel } from "@/lib/media-language";
 import { REGION, type CastMember, type Details, type Provider, type Season, type WatchOptions } from "@/lib/tmdb";
 
 export function BackLink({ href, label }: { href: string; label: string }) {
@@ -20,7 +22,6 @@ export function DetailHero({ details, facts, children, actions }: { details: Det
   const backdrop = imageUrl(details.backdropPath, "w1280");
   const poster = imageUrl(details.posterPath, "w500");
   return (
-    // "Watch trailer" inside turns this hero into an inline player (see HeroStage).
     <HeroStage title={details.title}>
     <section className="animate-rise relative mt-4 overflow-hidden rounded-[28px] bg-night text-white shadow-card">
       {backdrop && (
@@ -59,8 +60,8 @@ export function DetailHero({ details, facts, children, actions }: { details: Det
           {children}
           {actions ?? (details.trailerKey && (
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <VideoPlayButton  label="Play video" target="_blank" title={details.title} mediaId={details.id} mediaType={details.mediaType} />
-              <TrailerButton videoKey={details.trailerKey} title={details.title} />
+              <VideoPlayButton  label="Play video" target="_blank" title={details.title} mediaId={details.id} imdbId={details.imdbId} mediaType={details.mediaType} />
+              <TrailerButton videoKey={details.trailerKey} trailers={details.trailers} title={details.title} />
             </div>
           ))}
         </div>
@@ -89,7 +90,7 @@ export function Overview({ text }: { text: string }) {
   );
 }
 
-function ProviderLogos({ label, providers }: { label: string; providers: Provider[] }) {
+function ProviderLogos({ label, providers, title, fallback }: { label: string; providers: Provider[]; title: string; fallback: string | null }) {
   if (!providers.length) return null;
   return (
     <div>
@@ -97,10 +98,24 @@ function ProviderLogos({ label, providers }: { label: string; providers: Provide
       <ul className="flex flex-wrap gap-2.5">
         {providers.map((p) => {
           const logo = imageUrl(p.logoPath, "w92");
-          return (
-            <li key={p.id} title={p.name} className="flex items-center gap-2 rounded-2xl bg-paper p-1.5 pr-3.5 shadow-card ring-1 ring-ink/5">
+          const href = serviceLink(p.name, title, fallback);
+          const content = (
+            <>
               {logo && <Image src={logo} alt="" width={36} height={36} className="size-9 rounded-xl" />}
               <span className="text-sm font-medium">{p.name}</span>
+              {href && <ExternalLink className="size-3.5 text-muted transition group-hover:text-ink" />}
+            </>
+          );
+          return (
+            <li key={p.id}>
+              {href ? (
+                <a href={href} target="_blank" rel="noreferrer" title={`Open “${title}” on ${p.name}`}
+                  className="group flex items-center gap-2 rounded-2xl bg-paper p-1.5 pr-3.5 shadow-card ring-1 ring-ink/5 transition hover:-translate-y-0.5 hover:ring-ink/15 touch:min-h-12">
+                  {content}
+                </a>
+              ) : (
+                <span title={p.name} className="flex items-center gap-2 rounded-2xl bg-paper p-1.5 pr-3.5 shadow-card ring-1 ring-ink/5">{content}</span>
+              )}
             </li>
           );
         })}
@@ -109,10 +124,10 @@ function ProviderLogos({ label, providers }: { label: string; providers: Provide
   );
 }
 
-export function WatchProviders({ watch }: { watch: WatchOptions | null }) {
+export function WatchProviders({ watch, title, originalLanguage = "" }: { watch: WatchOptions | null; title: string; originalLanguage?: string }) {
   if (!watch) return null;
   return (
-    <section className="mt-10">
+    <section id="where-to-watch" className="mt-10 scroll-mt-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xl font-medium tracking-tight">Where to watch</h2>
         {watch.link && (
@@ -121,10 +136,23 @@ export function WatchProviders({ watch }: { watch: WatchOptions | null }) {
           </a>
         )}
       </div>
-      <div className="mt-4 flex flex-col gap-5">
-        <ProviderLogos label="Stream" providers={watch.stream} />
-        <ProviderLogos label="Rent" providers={watch.rent} />
-        <ProviderLogos label="Buy" providers={watch.buy} />
+
+      {/* Full-length viewing in other languages happens on these services, in their own players. */}
+      <div className="mt-4 flex items-start gap-3 rounded-2xl bg-accent/8 p-4 ring-1 ring-accent/15">
+        <Languages className="mt-0.5 size-5 shrink-0 text-accent" />
+        <div className="text-sm">
+          <p className="font-medium text-ink">Watch in your language</p>
+          <p className="mt-0.5 text-muted">
+            Open the title on a service below, then choose <span className="font-medium text-ink/80">Audio &amp; Subtitles</span> in its player — most services offer dubbed audio and subtitles in several languages.
+            {originalLanguage && <> Original audio: <span className="font-medium text-ink/80">{languageLabel(originalLanguage)}</span>.</>}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-5">
+        <ProviderLogos label="Stream" providers={watch.stream} title={title} fallback={watch.link} />
+        <ProviderLogos label="Rent" providers={watch.rent} title={title} fallback={watch.link} />
+        <ProviderLogos label="Buy" providers={watch.buy} title={title} fallback={watch.link} />
       </div>
       <p className="mt-4 text-xs text-muted">Availability data provided by JustWatch.</p>
     </section>

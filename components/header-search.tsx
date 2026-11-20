@@ -26,13 +26,34 @@ export function HeaderSearchField({ initialQuery = "" }: { initialQuery?: string
     inputRef.current?.focus();
   }
 
+  function toggleMobile() {
+    const next = !mobileOpen;
+    setMobileOpen(next);
+    if (next) requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
   return (
     <Fragment>
-      <button type="button" onClick={() => { setMobileOpen((open) => !open); requestAnimationFrame(() => inputRef.current?.focus()); }} aria-label={mobileOpen ? "Close search" : "Search movies"} aria-expanded={mobileOpen} className="grid size-10 place-items-center rounded-full border border-paper bg-paper/80 text-ink/70 shadow-sm transition hover:bg-paper hover:text-ink md:hidden touch:size-11">
+      <button
+        type="button"
+        onClick={toggleMobile}
+        aria-label={mobileOpen ? "Close search" : "Search movies"}
+        aria-expanded={mobileOpen}
+        className="order-3 ml-auto grid size-10 shrink-0 place-items-center rounded-full border border-paper bg-paper/80 text-ink/70 shadow-sm transition hover:bg-paper hover:text-ink md:hidden touch:size-11"
+      >
         {mobileOpen ? <X className="size-4.5" /> : <Search className="size-4.5" strokeWidth={1.75} />}
       </button>
 
-      <form role="search" onSubmit={(e) => { e.preventDefault(); submit(); }} className={`${mobileOpen ? "flex" : "hidden"} absolute inset-x-4 top-full z-30 mt-2 items-center gap-2 rounded-full border border-paper bg-paper px-4 py-1.5 shadow-card sm:inset-x-8 md:static md:mt-0 md:flex md:w-60 md:min-w-0 md:bg-paper/80 md:shadow-sm md:focus-within:bg-paper lg:w-56 xl:w-72`}>
+      <form
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        className={`${
+          mobileOpen ? "animate-rise flex" : "hidden"
+        } order-5 min-w-0 basis-full items-center gap-2 rounded-full border border-paper bg-paper px-4 py-1.5 shadow-card md:order-3 md:ml-auto md:flex md:w-52 md:basis-auto md:animate-none md:bg-paper/80 md:shadow-sm md:focus-within:bg-paper lg:w-56 xl:w-72`}
+      >
         {pending ? (
           <LoaderCircle className="size-4 shrink-0 animate-spin text-muted" />
         ) : (

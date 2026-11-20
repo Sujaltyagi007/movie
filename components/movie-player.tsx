@@ -1,7 +1,8 @@
 "use client";
-import type { ArchiveVideoSource } from "@/lib/archive";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AlertCircle, ExternalLink, LoaderCircle, Maximize, Minimize, Pause, PictureInPicture2, Play, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
+import type { ArchiveSubtitle, ArchiveVideoSource } from "@/lib/archive";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { getPreferredVideoLanguage, languageLabel, setPreferredVideoLanguage } from "@/components/video-language-select";
+import { AlertCircle, AudioLines, Captions, ExternalLink, LoaderCircle, Maximize, Minimize, Pause, PictureInPicture2, Play, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
 
 type MoviePlayerProps = {
   title: string;
@@ -9,7 +10,64 @@ type MoviePlayerProps = {
   poster?: string | null;
   archiveUrl: string;
   durationHintSeconds?: number | null;
+  /** Subtitle tracks (WebVTT URLs) — shown in the CC menu. */
+  subtitles?: ArchiveSubtitle[];
+  /** Original audio language of the film ("" if unknown) — labels the default audio. */
+  audioLanguage?: string;
 };
+
+const SUBTITLE_PREF_KEY = "reelio:subtitle-language";
+
+function readSubtitlePref(): string | null {
+  try {
+    return localStorage.getItem(SUBTITLE_PREF_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSubtitlePref(value: string) {
+  try {
+    localStorage.setItem(SUBTITLE_PREF_KEY, value);
+  } catch {
+    // Storage blocked — not remembered.
+  }
+}
+
+/** Show the selected subtitle track, disable the rest. <track> order = textTracks order. */
+function setTrackModes(video: HTMLVideoElement | null, ids: string[], selected: string | null) {
+  const tracks = video?.textTracks;
+  if (!tracks) return;
+  for (let i = 0; i < tracks.length; i++) tracks[i].mode = ids[i] === selected && selected !== null ? "showing" : "disabled";
+}
+
+const subtitleLabel = (s: ArchiveSubtitle) =>
+  `${s.language ? languageLabel(s.language) : "Subtitles"}${s.auto ? " (auto-generated)" : ""}`;
+
+const shortCode = (language: string) => (language ? language.split("-")[0].toUpperCase() : "");
+
+/**
+ * Compact chip that opens a native <select> (system picker on phones, full keyboard support):
+ * the select is invisible and covers the chip, the chip shows a short summary like "CC · EN".
+ */
+function PlayerMenu({ label, icon, summary, value, onChange, children }: {
+  label: string;
+  icon: ReactNode;
+  summary: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="relative inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white backdrop-blur transition focus-within:ring-2 focus-within:ring-white hover:bg-white/25 touch:min-h-9">
+      {icon}
+      <span aria-hidden>{summary}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} className="absolute inset-0 cursor-pointer opacity-0">
+        {children}
+      </select>
+    </label>
+  );
+}
 
 type WebkitVideoElement = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
 
@@ -28,7 +86,9 @@ function formatTime(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSeconds }: MoviePlayerProps) {
+export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSeconds, subtitles: rawSubtitles = [], audioLanguage = "" }: MoviePlayerProps) {
+  // Auto-generated captions are in the film's spoken language — use it when the file didn't say.
+  const subtitles = rawSubtitles.map((s) => (s.language || !s.auto || !audioLanguage ? s : { ...s, language: audioLanguage }));
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,8 +107,47 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
   const [controlsVisible, setControlsVisible] = useState(true);
   const [failed, setFailed] = useState(false);
 
+  const [subtitleId, setSubtitleId] = useState<string | null>(null);
+  const lastSubtitleId = useRef<string | null>(null);
+
   const pipSupported = useSyncExternalStore(noopSubscribe, () => Boolean(document.pictureInPictureEnabled), () => false);
   const activeSource = sources[sourceIndex] ?? sources[0];
+
+  // Audio: each dubbed language is its own set of files; "" = the original soundtrack.
+  const audioGroups = [...new Set(sources.map((s) => s.language))];
+  const currentAudio = activeSource?.language ?? "";
+  const qualityOptions = sources.map((s, i) => ({ s, i })).filter(({ s }) => s.language === currentAudio);
+  const audioName = (language: string) =>
+    language ? languageLabel(language) : `Original${audioLanguage ? ` (${languageLabel(audioLanguage)})` : ""}`;
+
+  // Subtitles made for this cut, plus those that fit every version.
+  const visibleSubtitles = subtitles.filter((s) => !s.stem || s.stem === activeSource?.stem);
+  const activeSubtitle = visibleSubtitles.find((s) => s.id === subtitleId) ?? null;
+
+  // Show the chosen track, hide the rest. Keyed on a string so the effect only re-runs when the
+  // track list or the choice actually changes. The ref lets a source switch re-apply it after load().
+  const visibleIds = visibleSubtitles.map((s) => s.id).join("|");
+  const trackModes = useRef({ ids: [] as string[], selected: null as string | null });
+  useEffect(() => {
+    trackModes.current = { ids: visibleIds ? visibleIds.split("|") : [], selected: subtitleId };
+    setTrackModes(videoRef.current, trackModes.current.ids, subtitleId);
+  }, [visibleIds, subtitleId]);
+
+  function chooseSubtitle(id: string | null) {
+    setSubtitleId(id);
+    const chosen = subtitles.find((s) => s.id === id);
+    if (chosen) lastSubtitleId.current = chosen.id;
+    writeSubtitlePref(chosen ? chosen.language || "und" : "off");
+  }
+
+  /** First play: turn on the viewer's usual subtitle language, when this film has it. */
+  function applySubtitlePreference() {
+    if (subtitleId !== null) return;
+    const pref = readSubtitlePref();
+    if (!pref || pref === "off") return;
+    const match = visibleSubtitles.find((s) => (s.language || "und") === pref) ?? visibleSubtitles.find((s) => s.language.split("-")[0] === pref.split("-")[0]);
+    if (match) setSubtitleId(match.id);
+  }
 
   const scheduleHideControls = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -67,10 +166,58 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
     };
   }, []);
 
-  const togglePlay = useCallback(async () => {
+  const switchQuality = (nextIndex: number, playAfter = false) => {
+    const video = videoRef.current;
+    if (!video || nextIndex === sourceIndex) return;
+    const resumeAt = video.currentTime;
+    const wasPlaying = playAfter || !video.paused;
+    setFailed(false);
+    setBuffering(true);
+    setSourceIndex(nextIndex);
+
+    requestAnimationFrame(() => {
+      const el = videoRef.current;
+      if (!el) return;
+      el.load();
+      el.addEventListener(
+        "loadedmetadata",
+        () => {
+          if (resumeAt > 0 && Number.isFinite(el.duration)) {
+            el.currentTime = Math.min(resumeAt, el.duration);
+          }
+          el.playbackRate = playbackRate;
+          setTrackModes(el, trackModes.current.ids, trackModes.current.selected);
+          if (wasPlaying) el.play().catch(() => undefined);
+        },
+        { once: true },
+      );
+    });
+  };
+
+  // Switch soundtrack: best-quality file of that language, resuming at the same moment.
+  const switchAudio = (language: string) => {
+    const next = sources.findIndex((s) => s.language === language);
+    if (next < 0) return;
+    if (language) setPreferredVideoLanguage(language);
+    switchQuality(next);
+  };
+
+  async function togglePlay() {
     const video = videoRef.current;
     if (!video || failed) return;
     if (video.paused) {
+      if (!hasStarted) {
+        applySubtitlePreference();
+        // First play: use the viewer's usual dub language (shared with the trailer picker) if
+        // this film has one — the page always renders the original soundtrack first.
+        const pref = getPreferredVideoLanguage();
+        const dub = pref ? sources.findIndex((s) => s.language === pref) : -1;
+        if (dub >= 0 && dub !== sourceIndex) {
+          setHasStarted(true);
+          switchQuality(dub, true);
+          return;
+        }
+      }
       try {
         await video.play();
         setHasStarted(true);
@@ -82,7 +229,7 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
       video.pause();
       setControlsVisible(true);
     }
-  }, [failed, scheduleHideControls]);
+  }
 
   const seekBy = useCallback(
     (delta: number) => {
@@ -119,33 +266,6 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
     setVolume(clamped);
     setMuted(clamped === 0);
     scheduleHideControls();
-  };
-
-  const switchQuality = (nextIndex: number) => {
-    const video = videoRef.current;
-    if (!video || nextIndex === sourceIndex) return;
-    const resumeAt = video.currentTime;
-    const wasPlaying = !video.paused;
-    setFailed(false);
-    setBuffering(true);
-    setSourceIndex(nextIndex);
-
-    requestAnimationFrame(() => {
-      const el = videoRef.current;
-      if (!el) return;
-      el.load();
-      el.addEventListener(
-        "loadedmetadata",
-        () => {
-          if (resumeAt > 0 && Number.isFinite(el.duration)) {
-            el.currentTime = Math.min(resumeAt, el.duration);
-          }
-          el.playbackRate = playbackRate;
-          if (wasPlaying) el.play().catch(() => undefined);
-        },
-        { once: true },
-      );
-    });
   };
 
   const toggleFullscreen = useCallback(async () => {
@@ -187,6 +307,10 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
     } else if (key === "f") {
       e.preventDefault();
       void toggleFullscreen();
+    } else if (key === "c" && visibleSubtitles.length > 0) {
+      // Toggle subtitles: off ↔ the last language used (or the first available).
+      e.preventDefault();
+      chooseSubtitle(subtitleId ? null : (visibleSubtitles.find((s) => s.id === lastSubtitleId.current) ?? visibleSubtitles[0]).id);
     }
   };
 
@@ -232,20 +356,43 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
           if (sourceIndex + 1 < sources.length) setSourceIndex((prev) => prev + 1);
           else setFailed(true);
         }}
-        className="size-full bg-black object-contain" />
+        className="size-full bg-black object-contain">
+        {/* Modes are driven from state (applySubtitleMode); all start disabled so nothing loads until chosen. */}
+        {visibleSubtitles.map((s) => (
+          <track key={s.id} kind="subtitles" src={s.url} srcLang={s.language || undefined} label={subtitleLabel(s)} />
+        ))}
+      </video>
 
       <div className={`pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-3 bg-linear-to-b from-black/80 via-black/40 to-transparent px-3 py-3 transition-opacity duration-300 sm:px-5 sm:py-4 ${showControls ? "opacity-100" : "opacity-0"}`}>
         <div className="min-w-0">
           <p className="truncate text-xs font-medium text-white/95 sm:text-sm">{title}</p>
           <p className="text-[11px] text-white/65">Public Domain · Internet Archive</p>
         </div>
-        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-          {sources.length > 1 && (
-            <select value={sourceIndex} onChange={(e) => switchQuality(Number(e.target.value))} aria-label="Video quality" className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white backdrop-blur transition hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
-              {sources.map((src, i) => (
-                <option key={src.url} value={i} className="bg-night text-white">{src.label}</option>
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {visibleSubtitles.length > 0 && (
+            <PlayerMenu label="Subtitles" icon={<Captions className="size-3.5" />} summary={activeSubtitle ? shortCode(activeSubtitle.language) || "On" : "Off"}
+              value={subtitleId ?? "off"} onChange={(v) => chooseSubtitle(v === "off" ? null : v)}>
+              <option value="off" className="bg-night text-white">Subtitles off</option>
+              {visibleSubtitles.map((s) => (
+                <option key={s.id} value={s.id} className="bg-night text-white">{subtitleLabel(s)}</option>
               ))}
-            </select>
+            </PlayerMenu>
+          )}
+          {audioGroups.length > 1 && (
+            <PlayerMenu label="Audio language" icon={<AudioLines className="size-3.5" />} summary={shortCode(currentAudio || audioLanguage) || "Orig"}
+              value={currentAudio} onChange={switchAudio}>
+              {audioGroups.map((language) => (
+                <option key={language || "original"} value={language} className="bg-night text-white">{audioName(language)}</option>
+              ))}
+            </PlayerMenu>
+          )}
+          {qualityOptions.length > 1 && (
+            <PlayerMenu label="Video quality" icon={null} summary={activeSource.label.replace(/ MP4$/, "")}
+              value={String(sourceIndex)} onChange={(v) => switchQuality(Number(v))}>
+              {qualityOptions.map(({ s, i }) => (
+                <option key={s.url} value={i} className="bg-night text-white">{s.label}</option>
+              ))}
+            </PlayerMenu>
           )}
           <a href={archiveUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium text-white backdrop-blur transition hover:bg-white/25 sm:inline-flex">
             Source <ExternalLink className="size-3" />
@@ -303,7 +450,9 @@ export function MoviePlayer({ title, sources, poster, archiveUrl, durationHintSe
 
       {!failed && (
         <div
-          className={`absolute inset-x-0 bottom-0 bg-linear-to-t from-black/90 via-black/55 to-transparent px-3 pb-2.5 pt-8 transition-opacity duration-300 sm:px-5 sm:pb-3.5 ${showControls ? "opacity-100" : "pointer-events-none opacity-0"
+          // The gradient itself lets taps through (on a phone it would otherwise cover the centre
+          // Play button); only the seek bar and buttons below take pointer events.
+          className={`pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/90 via-black/55 to-transparent px-3 pb-2.5 pt-8 transition-opacity duration-300 sm:px-5 sm:pb-3.5 ${showControls ? "opacity-100 *:pointer-events-auto" : "opacity-0"
             }`}
         >
           <div className="relative mb-2 flex h-5 items-center">

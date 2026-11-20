@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Fragment, Suspense } from "react";
+import { LISTS, type MediaType } from "@/lib/catalog";
 import { BrowseFilters } from "@/components/browse-filters";
 import { MediaGridSkeleton } from "@/components/media-grid";
-import { InfiniteMediaGrid } from "@/components/infinite-media-grid";
-import { LISTS, type MediaType } from "@/lib/catalog";
 import { getGenres, getProviders, REGION } from "@/lib/tmdb";
+import { InfiniteMediaGrid } from "@/components/infinite-media-grid";
 import { browseFeed, clampPage, feedQuery, getFeedPage } from "@/lib/feed";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -44,8 +44,6 @@ async function Browse({ type, searchParams }: { type: MediaType; searchParams: S
   const genre = feed.genre ?? undefined;
   const provider = feed.provider ?? undefined;
   const list = feed.list;
-  // First page is rendered here; the grid fetches the following ones as the user scrolls.
-  // `?page=N` still works as a starting point (old links / shared URLs).
   const startPage = clampPage(one(sp.page));
   const query = feedQuery(feed);
 
@@ -88,30 +86,16 @@ async function Browse({ type, searchParams }: { type: MediaType; searchParams: S
     <Fragment>
       <nav aria-label="Lists" className="mt-5 flex flex-wrap gap-1.5 sm:mt-6 sm:gap-2">
         {Object.entries(lists).map(([key, meta]) => (
-          <Link
-            key={key}
-            href={buildHref(type, { list: key === "popular" ? null : key })}
-            aria-current={list === key ? "page" : undefined}
-            className={`${chip} ${list === key ? chipActive : chipIdle}`}
-          >
+          <Link key={key} href={buildHref(type, { list: key === "popular" ? null : key })} aria-current={list === key ? "page" : undefined} className={`${chip} ${list === key ? chipActive : chipIdle}`}>
             {meta.label}
           </Link>
         ))}
       </nav>
 
-      <BrowseFilters
-        region={REGION}
-        providers={providerOptions}
-        genres={genreOptions}
-        clearHref={basePath(type)}
-      />
+      <BrowseFilters region={REGION} providers={providerOptions} genres={genreOptions} clearHref={basePath(type)} />
 
       <section className="mt-7 sm:mt-8">
-        {/* Keyed by list + filters, so switching them starts a fresh list from the top. */}
-        <InfiniteMediaGrid key={`${query}&from=${result.page}`} query={query} title={title}
-          initialItems={result.items} initialPage={result.page} totalPages={result.totalPages}
-          emptyHint="Try another genre or platform."
-        />
+        <InfiniteMediaGrid key={`${query}&from=${result.page}`} query={query} title={title} initialItems={result.items} initialPage={result.page} totalPages={result.totalPages} emptyHint="Try another genre or platform." />
       </section>
     </Fragment>
   );
