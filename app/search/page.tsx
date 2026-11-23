@@ -7,13 +7,19 @@ import { Layers, Search } from "lucide-react";
 import { getTopProviders, REGION } from "@/lib/tmdb";
 import { MediaGridSkeleton } from "@/components/media-grid";
 import { InfiniteMediaGrid } from "@/components/infinite-media-grid";
-import { clampPage, feedQuery, getFeedPage, searchFeed } from "@/lib/feed";
+import { MobileSearch, MobileSearchField } from "@/components/header-search";
+import { clampPage, feedQuery, getSearchFirstPage, searchFeed } from "@/lib/feed";
 
 export const metadata: Metadata = { title: "Search" };
 
 export default function SearchPage({ searchParams }: PageProps<"/search">) {
   return (
     <div className="pt-6 sm:pt-8">
+      <div className="mb-6 hidden phone:block">
+        <Suspense fallback={<MobileSearchField />}>
+          <MobileSearch />
+        </Suspense>
+      </div>
       <Suspense fallback={<MediaGridSkeleton />}>
         <Results searchParams={searchParams} />
       </Suspense>
@@ -25,7 +31,6 @@ async function Results({ searchParams }: Pick<PageProps<"/search">, "searchParam
   const sp = await searchParams;
   const feed = searchFeed(typeof sp.q === "string" ? sp.q : null, typeof sp.provider === "string" ? sp.provider : null);
   const page = clampPage(typeof sp.page === "string" ? sp.page : null);
-
   if (!feed || feed.kind !== "search") {
     return (
       <div className="grid place-items-center py-24 text-center">
@@ -37,16 +42,13 @@ async function Results({ searchParams }: Pick<PageProps<"/search">, "searchParam
   }
 
   const query = feed.query;
-  const [result, platforms] = await Promise.all([getFeedPage(feed, page), getTopProviders(10)]);
+  const [{ result, providers }, platforms] = await Promise.all([getSearchFirstPage(feed, page), getTopProviders(10)]);
   const key = feedQuery(feed);
   const platformName = platforms.find((p) => p.id === feed.provider)?.name;
-  const platformHref = (provider: number | null) =>
-    `/search?${new URLSearchParams({ q: query, ...(provider ? { provider: String(provider) } : {}) })}`;
-
+  const platformHref = (provider: number | null) => `/search?${new URLSearchParams({ q: query, ...(provider ? { provider: String(provider) } : {}) })}`;
   const chip = "flex items-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition touch:min-h-11";
   const chipIdle = "bg-paper/70 text-ink/75 ring-1 ring-ink/5 hover:bg-paper hover:text-ink";
   const chipActive = "bg-ink text-paper shadow-md";
-
   return (
     <Fragment>
       <h1 className="sr-only">Search results for {query}</h1>
@@ -73,11 +75,7 @@ async function Results({ searchParams }: Pick<PageProps<"/search">, "searchParam
         </ul>
       </nav>
 
-      <InfiniteMediaGrid key={`${key}&from=${result.page}`} query={key}
-        title={platformName ? `“${query}” on ${platformName}` : `Results for “${query}”`} showType
-        initialItems={result.items} initialPage={result.page} totalPages={result.totalPages}
-        emptyHint="Check the spelling, or try a shorter title."
-      />
+      <InfiniteMediaGrid key={`${key}&from=${result.page}`} query={key} title={platformName ? `“${query}” on ${platformName}` : `Results for “${query}”`} showType initialItems={result.items} initialProviders={providers} initialPage={result.page} totalPages={result.totalPages} emptyHint="Check the spelling, or try a shorter title." />
     </Fragment>
   );
 }

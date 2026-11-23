@@ -23,7 +23,6 @@ const EXTRA_THREE_LETTER: Record<string, string> = {
   vie: "vi",
 };
 
-/** Priority languages requested first in the subtitle menu. */
 const PRIORITY_LANGUAGES: Record<string, number> = {
   en: 0,
   hi: 1,
@@ -175,27 +174,18 @@ export function prioritizeSubtitleLanguage(
   return [tracks[index], ...tracks.slice(0, index), ...tracks.slice(index + 1)];
 }
 
-export function buildVidsrcSubtitlesManifestUrl(
-  origin: string,
-  params: { imdbId: string; season?: number; episode?: number; lang?: string },
-): string {
+export function buildVidsrcSubtitlesManifestUrl(origin: string, params: { imdbId: string; season?: number; episode?: number; lang?: string }): string {
   const url = new URL("/api/subtitles/vidsrc", origin);
   url.searchParams.set("id", params.imdbId);
   if (params.season !== undefined && params.episode !== undefined) {
     url.searchParams.set("season", String(params.season));
     url.searchParams.set("episode", String(params.episode));
   }
-  if (params.lang?.trim()) {
-    url.searchParams.set("lang", params.lang.trim());
-  }
+  if (params.lang?.trim()) { url.searchParams.set("lang", params.lang.trim()) }
   return url.toString();
 }
 
-export function buildVidsrcSubtitleEntries(
-  origin: string,
-  params: { imdbId: string; season?: number; episode?: number },
-  tracks: ExternalSubtitleTrack[],
-): VidsrcSubtitleEntry[] {
+export function buildVidsrcSubtitleEntries(origin: string, params: { imdbId: string; season?: number; episode?: number }, tracks: ExternalSubtitleTrack[]): VidsrcSubtitleEntry[] {
   return tracks.map((track) => {
     const fileUrl = new URL("/api/subtitles/track", origin);
     fileUrl.searchParams.set("id", params.imdbId);

@@ -1,18 +1,18 @@
 "use client";
-
 import { flushSync } from "react-dom";
+import type { MoviePlayerProps } from "@/features/player/components/movie-player";
+import { LazyMoviePlayer, preloadMoviePlayer } from "@/features/player/components/movie-player-lazy";
+import { VideoLanguageSelect, type VideoVersion } from "@/features/player/components/video-language-select";
 import { AlertCircle, LoaderCircle, Maximize, Minimize, RotateCcw, Smartphone, X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { VideoLanguageSelect, type VideoVersion } from "@/components/video-language-select";
 
-/**
- * Either a ready `src`, or a `load()` that resolves to one (shows a spinner meanwhile).
- * `versions` (with `src` = the chosen one) adds a language picker to the player.
- */
+export type ResolvedPlayTarget = | string | { kind: "iframe"; src: string } | { kind: "player"; player: MoviePlayerProps };
+
 export type PlayRequest = {
   label: string;
   src?: string;
-  load?: () => Promise<string>;
+  player?: MoviePlayerProps;
+  load?: () => Promise<ResolvedPlayTarget>;
   versions?: VideoVersion[];
   versionId?: string;
   onVersionChange?: (version: VideoVersion) => void;
@@ -21,9 +21,10 @@ type HeroPlayer = { play: (request: PlayRequest) => void };
 
 type PlayerState = {
   label: string;
-  load?: () => Promise<string>;
+  load?: () => Promise<ResolvedPlayTarget>;
   status: "loading" | "ready" | "error";
   src: string | null;
+  player: MoviePlayerProps | null;
   error?: string;
   versions?: VideoVersion[];
   versionId?: string;
@@ -39,8 +40,6 @@ export function useHeroPlayer() {
 type LockableOrientation = ScreenOrientation & { lock?: (orientation: string) => Promise<void> };
 
 const isTouch = () => window.matchMedia("(pointer: coarse)").matches;
-// iPhone Safari has no element Fullscreen API (only iPad does), so we fall back to a
-// fixed full-viewport "cover" player there.
 const hasFullscreenApi = () => document.fullscreenEnabled === true;
 
 export function HeroStage({ title, children }: { title: string; children: ReactNode }) {
@@ -50,19 +49,33 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
   const boxRef = useRef<HTMLElement>(null);
 
   const start = useCallback(async (request: PlayRequest) => {
+    if (request.player) {
+      setPlaying({ label: request.label, status: "ready", src: null, player: request.player });
+      return;
+    }
     if (request.src || !request.load) {
       setPlaying({
-        label: request.label, status: request.src ? "ready" : "error", src: request.src ?? null, error: request.src ? undefined : "No video to play.",
-        versions: request.versions, versionId: request.versionId, onVersionChange: request.onVersionChange,
+        label: request.label,
+        status: request.src ? "ready" : "error",
+        src: request.src ?? null, player: null,
+        error: request.src ? undefined : "No video to play.",
+        versions: request.versions, versionId: request.versionId,
+        onVersionChange: request.onVersionChange,
       });
       return;
     }
     const load = request.load;
-    setPlaying({ label: request.label, load, status: "loading", src: null });
+    setPlaying({ label: request.label, load, status: "loading", src: null, player: null });
     const stillCurrent = (state: PlayerState | null) => state !== null && state.load === load;
     try {
-      const src = await load();
-      setPlaying((state) => (stillCurrent(state) ? { ...state!, status: "ready", src } : state));
+      const resolved = await load();
+      if (typeof resolved === "string") {        setPlaying((state) => (stillCurrent(state) ? { ...state!, status: "ready", src: resolved, player: null } : state));
+      }
+       else if (resolved.kind === "iframe") {
+        setPlaying((state) => (stillCurrent(state) ? { ...state!, status: "ready", src: resolved.src, player: null } : state));
+      } else {
+        setPlaying((state) => (stillCurrent(state) ? { ...state!, status: "ready", src: null, player: resolved.player } : state));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load video.";
       setPlaying((state) => (stillCurrent(state) ? { ...state!, status: "error", error: message } : state));
@@ -83,16 +96,13 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
 
   const play = useCallback(
     (request: PlayRequest) => {
-      // Render synchronously so fullscreen is requested inside the tap gesture.
+      // Start fetching the player chunk while the stream resolves (no-op once cached).
+      preloadMoviePlayer();
       flushSync(() => void start(request));
       const box = boxRef.current;
       if (!box) return;
-      if (isTouch()) {
-        // Phones/tablets: straight into full video mode (real fullscreen, or the iPhone cover player).
-        enterFullscreen();
-      } else {
-        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }
+      if (isTouch()) { enterFullscreen() }
+      else { box.scrollIntoView({ behavior: "smooth", block: "nearest" }) }
     },
     [start, enterFullscreen],
   );
@@ -124,7 +134,6 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
     return () => window.removeEventListener("keydown", onKey);
   }, [playing, cover, stop]);
 
-  // Switch language in place: same player, same full-screen state, new video source.
   function switchVersion(version: VideoVersion) {
     setPlaying((state) => (state ? { ...state, src: version.src, versionId: version.id, status: "ready" } : state));
     playing?.onVersionChange?.(version);
@@ -143,39 +152,20 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
   }
 
   const expanded = isFullscreen || cover;
-  const icon =
-    "grid size-10 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-white/25 touch:size-11";
-
-  const boxClass = expanded
-    ? // Full video mode. Padding keeps the picture clear of the notch / Dynamic Island / home indicator.
-      `size-full pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] ${cover ? "fixed inset-0 z-50" : "relative"}`
-    : // Inline: exact 16:9, width shrinks so the height always fits the viewport.
-      "relative animate-rise mx-auto mt-4 aspect-video w-full max-w-[calc((100dvh-6rem)*16/9)] rounded-2xl shadow-card sm:rounded-[28px]";
+  const icon = "grid size-10 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-white/25 touch:size-11";
+  const boxClass = expanded ? `size-full pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] ${cover ? "fixed inset-0 z-50" : "relative"}` : "relative animate-rise mx-auto mt-4 aspect-video w-full max-w-[calc((100dvh-6rem)*16/9)] rounded-2xl shadow-card sm:rounded-[28px]";
+  const readyPlayer = playing?.status === "ready" ? playing.player : null;
 
   return (
     <HeroPlayerContext value={{ play }}>
       {playing ? (
-        <section
-          ref={boxRef}
-          data-player-open={cover ? "" : undefined}
-          aria-label={`${playing.label}: ${title}`}
-          aria-busy={playing.status === "loading"}
-          className={`grid place-items-center overflow-hidden bg-black text-white ${boxClass}`}
-        >
-          {playing.status === "ready" && playing.src ? (
-            <iframe
-              src={playing.src}
-              title={`${playing.label}: ${title}`}
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              allowFullScreen
-              referrerPolicy="origin"
-              className={
-                expanded
-                  ? // Largest 16:9 that fits the safe area: full width in portrait, full height in landscape.
-                    "aspect-video h-auto max-h-full w-[min(100%,calc((100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))*16/9))] border-0"
-                  : "absolute inset-0 size-full border-0"
-              }
-            />
+        <section ref={boxRef} data-player-open={cover ? "" : undefined} aria-label={`${playing.label}: ${title}`} aria-busy={playing.status === "loading"} className={`grid place-items-center overflow-hidden bg-black text-white ${boxClass}`}        >
+          {readyPlayer ? (
+            <div className={expanded ? "aspect-video h-auto max-h-full w-[min(100%,calc((100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))*16/9))]" : "absolute inset-0 size-full"} >
+              <LazyMoviePlayer {...readyPlayer} autoPlay onClose={stop} />
+            </div>
+          ) : playing.status === "ready" && playing.src ? (
+            <iframe src={playing.src} title={`${playing.label}: ${title}`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="origin" className={expanded ? "aspect-video h-auto max-h-full w-[min(100%,calc((100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))*16/9))] border-0" : "absolute inset-0 size-full border-0"} />
           ) : playing.status === "loading" ? (
             <div className="flex flex-col items-center gap-3 text-white/80">
               <LoaderCircle className="size-10 animate-spin text-white" strokeWidth={1.5} />
@@ -201,32 +191,28 @@ export function HeroStage({ title, children }: { title: string; children: ReactN
             </div>
           )}
 
-          {/* Portrait phone in full video mode: nudge to rotate (the picture fills the screen sideways). */}
           {expanded && playing.status === "ready" && (
             <p className="pointer-events-none absolute inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] hidden items-center justify-center gap-2 text-xs text-white/55 touch:portrait:flex">
               <Smartphone className="size-4 rotate-90" strokeWidth={1.75} /> Turn your phone sideways for a bigger picture
             </p>
           )}
 
-          {playing.status === "ready" && playing.versions && playing.versions.length > 1 && (
-            <VideoLanguageSelect
-              versions={playing.versions}
-              value={playing.versionId ?? playing.versions[0].id}
-              onChange={switchVersion}
-              className="absolute left-[max(0.75rem,env(safe-area-inset-left))] top-[max(0.75rem,env(safe-area-inset-top))] z-10"
-            />
+          {playing.status === "ready" && !readyPlayer && playing.versions && playing.versions.length > 1 && (
+            <VideoLanguageSelect versions={playing.versions} value={playing.versionId ?? playing.versions[0].id} onChange={switchVersion} className="absolute left-[max(0.75rem,env(safe-area-inset-left))] top-[max(0.75rem,env(safe-area-inset-top))] z-10" />
           )}
 
-          <div className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex gap-2">
-            {playing.status === "ready" && (
-              <button type="button" onClick={toggleFullscreen} aria-label={expanded ? "Exit full screen" : "Full screen"} title={expanded ? "Exit full screen" : "Full screen"} className={icon}>
-                {expanded ? <Minimize className="size-4.5" /> : <Maximize className="size-4.5" />}
+          {!readyPlayer && (
+            <div className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex gap-2">
+              {playing.status === "ready" && (
+                <button type="button" onClick={toggleFullscreen} aria-label={expanded ? "Exit full screen" : "Full screen"} title={expanded ? "Exit full screen" : "Full screen"} className={icon}>
+                  {expanded ? <Minimize className="size-4.5" /> : <Maximize className="size-4.5" />}
+                </button>
+              )}
+              <button type="button" onClick={stop} aria-label="Close video" title="Close video" className={icon}>
+                <X className="size-5" />
               </button>
-            )}
-            <button type="button" onClick={stop} aria-label="Close video" title="Close video" className={icon}>
-              <X className="size-5" />
-            </button>
-          </div>
+            </div>
+          )}
         </section>
       ) : (
         children

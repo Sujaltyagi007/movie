@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { STREAM_EPISODE, STREAM_MOVIE } from "@/lib/stream";
-import {
-  buildVidsrcSubtitlesManifestUrl,
-  getExternalSubtitles,
-  resolvePublicOrigin,
-  VALID_IMDB_ID,
-} from "@/lib/vidsrc-subtitles";
+import { buildVidsrcSubtitlesManifestUrl, getExternalSubtitles, resolvePublicOrigin, VALID_IMDB_ID } from "@/lib/vidsrc-subtitles";
 
 const VALID_ID = /^(\d+|tt\d+)$/;
 
@@ -66,16 +61,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     if (!VALID_ID.test(id)) return NextResponse.json({ error: "Invalid media ID" }, { status: 400 });
-
     const body = (await request.json().catch(() => null)) as StreamPayload | null;
-    const mediaType =
-      body?.mediaType === "tv"
-        ? "tv"
-        : body?.mediaType === undefined || body.mediaType === "movie"
-          ? "movie"
-          : null;
+    const mediaType = body?.mediaType === "tv" ? "tv" : body?.mediaType === undefined || body.mediaType === "movie" ? "movie" : null;
     if (!mediaType) return NextResponse.json({ error: "Invalid media type" }, { status: 400 });
-
     const rawImdb = typeof body?.imdbId === "string" ? body.imdbId.trim() : "";
     const resolvedImdbId = VALID_IMDB_ID.test(id) ? id : VALID_IMDB_ID.test(rawImdb) ? rawImdb : null;
     const manualSub = typeof body?.sub === "string" && body.sub.trim() ? body.sub.trim() : undefined;
@@ -85,24 +73,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (mediaType === "tv") {
       const season = parsePositiveInt(body?.season, 1);
       const episode = parsePositiveInt(body?.episode, 1);
-      if (!season || !episode) {
-        return NextResponse.json({ error: "Invalid season or episode" }, { status: 400 });
-      }
+      if (!season || !episode) { return NextResponse.json({ error: "Invalid season or episode" }, { status: 400 }) }
       const subInfo = manualSub ?? (await resolveAutoSubInfo(request, resolvedImdbId, season, episode, subLang));
-      try {
-        embedUrl = STREAM_EPISODE(id, season, episode, subInfo);
-      } catch {
-        return NextResponse.json({ error: "Invalid subtitle URL" }, { status: 400 });
-      }
+      try { embedUrl = STREAM_EPISODE(id, season, episode, subInfo) }
+      catch { return NextResponse.json({ error: "Invalid subtitle URL" }, { status: 400 }) }
     } else {
       const subInfo = manualSub ?? (await resolveAutoSubInfo(request, resolvedImdbId, undefined, undefined, subLang));
-      try {
-        embedUrl = STREAM_MOVIE(id, subInfo);
-      } catch {
-        return NextResponse.json({ error: "Invalid subtitle URL" }, { status: 400 });
-      }
+      try { embedUrl = STREAM_MOVIE(id, subInfo) }
+      catch { return NextResponse.json({ error: "Invalid subtitle URL" }, { status: 400 }) }
     }
-
     return NextResponse.json({ videoUrl: await resolveStreamUrl(embedUrl) });
   } catch (error) {
     console.error("Stream API error:", error);

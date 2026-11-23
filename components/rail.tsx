@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { CalendarClock, Film, House, Search, Tv, type LucideIcon } from "lucide-react";
+import type { DestinationKey } from "@/components/nav-links";
 
-type RailItem = { href: string; label: string; icon: LucideIcon; primary?: boolean };
+/** `shortLabel`: used where space is tight (phone tab bar); `label` stays the accessible name. */
+type Destination = { key: DestinationKey; href: string; label: string; shortLabel?: string; icon: LucideIcon; primary?: boolean };
 
-const ITEMS: RailItem[] = [
-  { href: "/", label: "Home", icon: House, primary: true },
-  { href: "/search", label: "Search", icon: Search },
-  { href: "/movies", label: "Movies", icon: Film },
-  { href: "/tv", label: "TV Shows", icon: Tv },
-  { href: "/movies?list=upcoming", label: "Coming soon", icon: CalendarClock },
+/** App sections, shared by the desktop rail and the phone bottom tab bar. */
+export const DESTINATIONS: Destination[] = [
+  { key: "home", href: "/", label: "Home", icon: House, primary: true },
+  { key: "search", href: "/search", label: "Search", icon: Search },
+  { key: "movies", href: "/movies", label: "Movies", icon: Film },
+  { key: "tv", href: "/tv", label: "TV Shows", icon: Tv },
+  { key: "upcoming", href: "/movies?list=upcoming", label: "Coming soon", shortLabel: "Upcoming", icon: CalendarClock },
 ];
 
 export function Rail() {
@@ -16,7 +19,7 @@ export function Rail() {
     <nav aria-label="Primary" className="hidden w-12 shrink-0 md:block [@media(max-height:520px)]:hidden">
       <div className="sticky top-8 flex h-[calc(100dvh-5.5rem)] min-h-max flex-col items-center justify-between gap-4 py-3">
         <ul className="flex flex-col items-center gap-2.5">
-          {ITEMS.map(({ href, label, icon: Icon, primary }) => (
+          {DESTINATIONS.map(({ href, label, icon: Icon, primary }) => (
             <li key={label} className="group relative">
               <Link href={href} aria-label={label} className={primary ? "grid size-10 place-items-center rounded-full bg-ink text-paper shadow-md transition hover:bg-ink-soft" : "grid size-10 place-items-center rounded-full border border-paper bg-paper/80 text-ink/70 shadow-sm transition hover:bg-paper hover:text-ink"}>
                 <Icon className="size-4.5" strokeWidth={1.75} />

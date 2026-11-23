@@ -1,5 +1,5 @@
 "use client";
-import type { Media } from "@/lib/catalog";
+import { mediaKey, type Media, type ProviderMap } from "@/lib/catalog";
 import { MediaGrid } from "@/components/media-grid";
 import { ArrowUp, LoaderCircle, RotateCcw } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
@@ -12,13 +12,13 @@ type Props = {
   title?: string;
   showType?: boolean;
   emptyHint?: string;
+  /** Streaming services for `initialItems`, resolved after the grid first renders (search). */
+  initialProviders?: Promise<ProviderMap> | null;
 };
 
 type PageResponse = { items: Media[]; page: number; totalPages: number };
 
-const itemKey = (m: Media) => `${m.mediaType}-${m.id}`;
-
-export function InfiniteMediaGrid({ query, initialItems, initialPage, totalPages: initialTotal, title, showType, emptyHint }: Props) {
+export function InfiniteMediaGrid({ query, initialItems, initialPage, totalPages: initialTotal, title, showType, emptyHint, initialProviders }: Props) {
   const [items, setItems] = useState(initialItems);
   const [page, setPage] = useState(initialPage);
   const [totalPages, setTotalPages] = useState(initialTotal);
@@ -38,8 +38,8 @@ export function InfiniteMediaGrid({ query, initialItems, initialPage, totalPages
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as PageResponse;
       setItems((prev) => {
-        const seen = new Set(prev.map(itemKey));
-        const fresh = data.items.filter((m) => !seen.has(itemKey(m)));
+        const seen = new Set(prev.map(mediaKey));
+        const fresh = data.items.filter((m) => !seen.has(mediaKey(m)));
         return fresh.length ? [...prev, ...fresh] : prev;
       });
       setPage((p) => Math.max(p + 1, data.page));
@@ -66,6 +66,22 @@ export function InfiniteMediaGrid({ query, initialItems, initialPage, totalPages
     return () => observer.disconnect();
   }, [hasMore, status, loadMore]);
 
+  // Fill in provider badges on the first page once their lookups finish. Items loaded later
+  // through /api/titles already carry their providers, so they are left as they are.
+  useEffect(() => {
+    if (!initialProviders) return;
+    let active = true;
+    // A promise passed from a Server Component arrives as a React thenable whose `.then()`
+    // returns undefined, so adopt it into a real Promise before chaining.
+    Promise.resolve(initialProviders).then((providers) => {
+      if (!active) return;
+      setItems((prev) => prev.map((m) => (m.providers || !providers[mediaKey(m)] ? m : { ...m, providers: providers[mediaKey(m)] })));
+    }).catch((error: unknown) => {
+      console.warn("[search] streaming services unavailable:", error instanceof Error ? error.message : error);
+    });
+    return () => { active = false; };
+  }, [initialProviders]);
+
   useEffect(() => () => inFlight.current?.abort(), []);
 
   const button = "inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition touch:py-3";
@@ -73,8 +89,6 @@ export function InfiniteMediaGrid({ query, initialItems, initialPage, totalPages
   return (
     <div>
       {items.length === 0 && hasMore && status !== "error" ? (
-        // A filtered feed (e.g. search on one platform) can come back empty while later pages
-        // still have matches — keep looking instead of claiming nothing was found.
         <div>
           {title && <h2 className="mb-4 text-xl font-medium tracking-tight">{title}</h2>}
           <p className="inline-flex items-center gap-2 py-10 text-sm text-muted">

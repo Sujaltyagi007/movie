@@ -12,8 +12,13 @@ export const NAV_ITEMS = [
 
 type NavKey = (typeof NAV_ITEMS)[number]["key"];
 
-function activeKeyFor(pathname: string, list: string | null): NavKey | undefined {
+/** Every app section: the text nav items plus Search (which only the rail and tab bar show). */
+export type DestinationKey = NavKey | "search";
+
+/** Which section the current URL belongs to (detail pages count as their catalog). */
+export function activeNavKey(pathname: string, list: string | null): DestinationKey | undefined {
   if (pathname === "/") return "home";
+  if (pathname === "/search") return "search";
   if (pathname === "/movies") return list === "upcoming" ? "upcoming" : "movies";
   if (pathname.startsWith("/movie/")) return "movies";
   if (pathname === "/tv" || pathname.startsWith("/tv/")) return "tv";
@@ -38,16 +43,17 @@ const STYLES: Record<Variant, { base: string; active: string; idle: string }> = 
 export function NavLinks({ variant }: { variant: Variant }) {
   const pathname = usePathname();
   const params = useSearchParams();
-  return <NavLinkList variant={variant} activeKey={activeKeyFor(pathname, params.get("list"))} />;
+  return <NavLinkList variant={variant} activeKey={activeNavKey(pathname, params.get("list"))} />;
 }
 
-function PendingDot() {
+/** Small pulsing dot shown while a link's navigation is pending (must render inside a <Link>). */
+export function PendingDot() {
   const { pending } = useLinkStatus();
   return (
     <span aria-hidden className={`absolute right-1 top-1 size-1.5 rounded-full bg-accent transition-opacity ${pending ? "animate-pulse opacity-100" : "opacity-0"}`} />
   );
 }
-export function NavLinkList({ variant, activeKey }: { variant: Variant; activeKey?: NavKey }) {
+export function NavLinkList({ variant, activeKey }: { variant: Variant; activeKey?: DestinationKey }) {
   const s = STYLES[variant];
   return (
     <Fragment>

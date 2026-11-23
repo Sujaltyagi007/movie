@@ -10,6 +10,10 @@
 /* Short screens — phones in landscape (iPhone 13 / 15 Pro: ~340px tall with Safari's bars). */
 @custom-variant short (@media (max-height: 520px));
 
+/* Phones in portrait: below `md` and not `short`. Gets the app-style chrome (sticky header +
+   bottom tab bar). Never overlaps md/lg/short, so its rules don't depend on CSS order. */
+@custom-variant phone (@media (max-width: 47.999rem) and (min-height: 521px));
+
 @theme inline {
   --font-sans: var(--font-google-sans), ui-sans-serif, system-ui, sans-serif;
 
@@ -90,6 +94,28 @@ body {
   background-color: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+/* App feel on touch screens: no grey flash on tap, and no double-tap-zoom delay on controls. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+a, button, label, select, summary, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* Installed app (home-screen launch): no rubber-band bounce or pull-to-refresh at the page
+   edges, like a native app. Browser tabs keep their normal pull-to-refresh. */
+@media (display-mode: standalone) {
+  html {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* The bottom tab bar steps aside while a full-screen player or modal is open. */
+html:has(dialog[open]) [data-tab-bar],
+html:has([data-player-open]) [data-tab-bar] {
+  display: none;
 }
 
 /* Glows live on a fixed layer instead of `background-attachment: fixed`, which iOS Safari

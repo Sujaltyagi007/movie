@@ -1,5 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
 import { srtToVtt } from "@/lib/subtitles";
+import { NextResponse, type NextRequest } from "next/server";
+import { findOpenSubtitleTrackById } from "@/lib/subtitles-lookup";
 import { getExternalSubtitles, VALID_IMDB_ID } from "@/lib/vidsrc-subtitles";
 
 const MAX_BYTES = 3 * 1024 * 1024;
@@ -52,7 +53,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const tracks = await getExternalSubtitles({ imdbId, season, episode });
-    const matched = tracks.find((t) => t.id === trackId);
+    const matched =
+      tracks.find((t) => t.id === trackId) ??
+      (await findOpenSubtitleTrackById({ imdbId, trackId, season, episode }));
     if (!matched) {
       return new NextResponse("Subtitle track not found", { status: 404, headers: CORS_HEADERS });
     }

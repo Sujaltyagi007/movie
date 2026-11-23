@@ -7,7 +7,7 @@ import { HeaderSearch, HeaderSearchField } from "@/components/header-search";
 
 export function TopBar() {
   return (
-    <header className="relative z-30 px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-8 sm:pt-[max(1.5rem,env(safe-area-inset-top))] xl:px-12 short:px-6 short:pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <header className="relative z-30 px-4 pt-[max(1rem,env(safe-area-inset-top))] phone:sticky phone:top-0 phone:border-b phone:border-ink/5 phone:bg-paper/75 phone:pb-3 phone:backdrop-blur-xl phone:backdrop-saturate-150 sm:px-8 sm:pt-[max(1.5rem,env(safe-area-inset-top))] xl:px-12 short:px-6 short:pt-[max(0.75rem,env(safe-area-inset-top))]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 sm:gap-x-4 xl:px-4">
         <Link href="/" className="order-1 flex shrink-0 items-center gap-2.5" aria-label="Reelio home">
           <span className="grid size-9 place-items-center rounded-xl bg-ink text-paper shadow-md">
@@ -26,12 +26,12 @@ export function TopBar() {
           <HeaderSearch />
         </Suspense>
 
-        <div className="order-4 shrink-0">
+        <div className="order-4 shrink-0 phone:ml-auto">
           <ThemeToggle />
         </div>
       </div>
 
-      <nav aria-label="Main" className="no-scrollbar -mx-1 mt-4 flex gap-5 overflow-x-auto px-1 pr-8 mask-[linear-gradient(to_right,black_85%,transparent)] md:gap-7 md:mask-none lg:hidden touch:mt-1 short:sm:hidden">
+      <nav aria-label="Main" className="no-scrollbar -mx-1 mt-4 flex gap-5 overflow-x-auto px-1 pr-8 mask-[linear-gradient(to_right,black_85%,transparent)] md:gap-7 md:mask-none lg:hidden touch:mt-1 short:sm:hidden phone:hidden">
         <Suspense fallback={<NavLinkList variant="mobile" />}>
           <NavLinks variant="mobile" />
         </Suspense>

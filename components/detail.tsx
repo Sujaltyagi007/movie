@@ -1,13 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
-import type { ReactNode } from "react";
-import { HeroStage } from "@/components/hero-player";
-import { imageUrl, releaseYear } from "@/lib/catalog";
-import { TrailerButton } from "@/components/trailer-button";
-import { VideoPlayButton } from "@/components/VideoPlayButton";
-import { ArrowLeft, ExternalLink, Languages, Star, UserRound } from "lucide-react";
 import { serviceLink } from "@/lib/services";
+import { Fragment, type ReactNode } from "react";
 import { languageLabel } from "@/lib/media-language";
+import { imageUrl, releaseYear } from "@/lib/catalog";
+import { HeroStage, TrailerButton, VideoPlayButton } from "@/features/player";
+import { ArrowLeft, ExternalLink, Languages, Star, UserRound } from "lucide-react";
 import { REGION, type CastMember, type Details, type Provider, type Season, type WatchOptions } from "@/lib/tmdb";
 
 export function BackLink({ href, label }: { href: string; label: string }) {
@@ -58,16 +56,25 @@ export function DetailHero({ details, facts, children, actions }: { details: Det
             </ul>
           )}
           {children}
-          {actions ?? (details.trailerKey && (
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <VideoPlayButton  label="Play video" target="_blank" title={details.title} mediaId={details.id} imdbId={details.imdbId} mediaType={details.mediaType} />
-              <TrailerButton videoKey={details.trailerKey} trailers={details.trailers} title={details.title} />
-            </div>
-          ))}
+          {actions ?? <DetailActions details={details} />}
         </div>
       </div>
     </section>
     </HeroStage>
+  );
+}
+
+/** Row of hero buttons. On portrait phones the buttons stack full width, like an app's primary actions. */
+export function HeroActions({ children }: { children: ReactNode }) {
+  return <div className="mt-6 flex flex-wrap items-center gap-3 phone:flex-col phone:items-stretch phone:[&>button]:justify-center phone:[&>button]:py-3">{children}</div>;
+}
+
+export function DetailActions({ details }: { details: Details }) {
+  return (
+    <HeroActions>
+      <VideoPlayButton label="Play video" title={details.title} mediaId={details.id} imdbId={details.imdbId} mediaType={details.mediaType} />
+      {details.trailerKey && <TrailerButton videoKey={details.trailerKey} trailers={details.trailers} title={details.title} />}
+    </HeroActions>
   );
 }
 
@@ -95,19 +102,20 @@ function ProviderLogos({ label, providers, title, fallback }: { label: string; p
   return (
     <div>
       <p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted">{label}</p>
-      <ul className="flex flex-wrap gap-2.5">
+      {/* Phones: a two-column grid, so one service per line doesn't make the section very tall. */}
+      <ul className="flex flex-wrap gap-2.5 phone:grid phone:grid-cols-2">
         {providers.map((p) => {
           const logo = imageUrl(p.logoPath, "w92");
           const href = serviceLink(p.name, title, fallback);
           const content = (
-            <>
-              {logo && <Image src={logo} alt="" width={36} height={36} className="size-9 rounded-xl" />}
-              <span className="text-sm font-medium">{p.name}</span>
-              {href && <ExternalLink className="size-3.5 text-muted transition group-hover:text-ink" />}
-            </>
+            <Fragment>
+              {logo && <Image src={logo} alt="" width={36} height={36} className="size-9 shrink-0 rounded-xl" />}
+              <span className="min-w-0 truncate text-sm font-medium">{p.name}</span>
+              {href && <ExternalLink className="size-3.5 shrink-0 text-muted transition group-hover:text-ink" />}
+            </Fragment>
           );
           return (
-            <li key={p.id}>
+            <li key={p.id} className="min-w-0">
               {href ? (
                 <a href={href} target="_blank" rel="noreferrer" title={`Open “${title}” on ${p.name}`}
                   className="group flex items-center gap-2 rounded-2xl bg-paper p-1.5 pr-3.5 shadow-card ring-1 ring-ink/5 transition hover:-translate-y-0.5 hover:ring-ink/15 touch:min-h-12">
@@ -137,7 +145,6 @@ export function WatchProviders({ watch, title, originalLanguage = "" }: { watch:
         )}
       </div>
 
-      {/* Full-length viewing in other languages happens on these services, in their own players. */}
       <div className="mt-4 flex items-start gap-3 rounded-2xl bg-accent/8 p-4 ring-1 ring-accent/15">
         <Languages className="mt-0.5 size-5 shrink-0 text-accent" />
         <div className="text-sm">

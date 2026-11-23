@@ -88,7 +88,7 @@ export type MediaPage = { items: Media[]; page: number; totalPages: number };
 
 function toMedia(raw: RawItem, fallbackType?: MediaType): Media | null {
   const mediaType = raw.media_type ?? fallbackType;
-  if (mediaType !== "movie" && mediaType !== "tv") return null; // e.g. "person" in multi-search
+  if (mediaType !== "movie" && mediaType !== "tv") return null;
   return {
     id: raw.id,
     mediaType,
@@ -123,6 +123,26 @@ export async function getList<T extends MediaType>(type: T, list: ListKey<T>, pa
   cacheLife("hours");
   const path = (LISTS[type] as Record<string, { path: string }>)[list as string].path;
   return toPage(await tmdb<Page>(path, { page: String(page), region: REGION }), type);
+}
+
+/** Placeholder `[id]` param: not numeric, so the detail loaders return null and the page 404s. */
+export const PLACEHOLDER_ID = "__placeholder__";
+
+/**
+ * IDs worth prerendering at build time for `/movie/[id]` and `/tv/[id]`: this week's trending
+ * titles first, then popular ones, deduplicated. Cache Components requires `generateStaticParams`
+ * to return at least one param, so a TMDB failure falls back to `PLACEHOLDER_ID` instead of
+ * failing the build; unlisted IDs are still rendered on first visit and cached.
+ */
+export async function getPrerenderIds(type: MediaType, limit: number): Promise<{ id: string }[]> {
+  try {
+    const [trending, popular] = await Promise.all([getTrending(type, "week"), getList(type, "popular")]);
+    const ids = [...new Set([...trending, ...popular.items].map((m) => String(m.id)))].slice(0, limit);
+    if (ids.length > 0) return ids.map((id) => ({ id }));
+  } catch (error) {
+    console.warn(`[prerender] ${type} IDs unavailable, using placeholder:`, error instanceof Error ? error.message : error);
+  }
+  return [{ id: PLACEHOLDER_ID }];
 }
 
 export async function discover(type: MediaType, filters: { genre?: number; provider?: number; page?: number }): Promise<MediaPage> {
@@ -312,15 +332,12 @@ export type Details = {
   backdropPath: string | null;
   rating: number;
   voteCount: number;
-  /** Age rating for REGION, e.g. "PG-13" or "TV-MA"; empty when TMDB has none. */
   certification: string;
   date: string;
   genres: Genre[];
   cast: CastMember[];
   trailerKey: string | null;
-  /** The trailer in every language TMDB has one for (first = default). */
   trailers: Trailer[];
-  /** ISO 639-1 code of the original audio, e.g. "en", "te" ("" if unknown). */
   originalLanguage: string;
   imdbId?: string | null;
   related: Media[];
@@ -330,7 +347,6 @@ export type Details = {
 type RawReleaseDates = { results: { iso_3166_1: string; release_dates: { certification: string; type: number }[] }[] };
 type RawContentRatings = { results: { iso_3166_1: string; rating: string }[] };
 
-/** Movie age rating for REGION, preferring the theatrical release (type 3), then any release. */
 function movieCertification(raw: RawReleaseDates | undefined): string {
   const dates = raw?.results.find((r) => r.iso_3166_1 === REGION)?.release_dates ?? [];
   const rated = dates.filter((d) => d.certification.trim());
@@ -345,17 +361,14 @@ function toDetails(raw: RawDetailsBase, mediaType: MediaType, title: string, dat
   const recs = toMediaList(raw.recommendations.results, mediaType);
   return {
     id: raw.id,
-    mediaType,
-    title,
+    mediaType, title,
     overview: raw.overview,
     tagline: raw.tagline ?? "",
     posterPath: raw.poster_path,
     backdropPath: raw.backdrop_path,
     rating: raw.vote_average,
     voteCount: raw.vote_count ?? 0,
-    certification,
-    date,
-    genres: raw.genres,
+    certification, date, genres: raw.genres,
     cast: raw.credits.cast.slice(0, 15),
     trailerKey: pickTrailer(raw.videos.results.filter((v) => !v.iso_639_1 || v.iso_639_1 === "en"))?.key ?? pickTrailer(raw.videos.results)?.key ?? null,
     trailers: pickTrailers(raw.videos.results, raw.original_language),
@@ -447,8 +460,7 @@ export async function getBannerExtras(type: MediaType, id: number): Promise<Bann
   "use cache";
   cacheLife("days");
   const data = await tmdb<{
-    runtime?: number | null;
-    episode_run_time?: number[]; genres: { name: string }[]; videos: { results: Video[] };
+    runtime?: number | null; episode_run_time?: number[]; genres: { name: string }[]; videos: { results: Video[] };
     images: { logos: { file_path: string; width: number; height: number; iso_639_1: string | null }[] };
   }>(`/${type}/${id}`, { append_to_response: "videos,images", include_image_language: "en,null" });
 

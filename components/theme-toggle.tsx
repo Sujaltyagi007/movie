@@ -1,6 +1,7 @@
 "use client";
 import { Moon, Sun } from "lucide-react";
-import { useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { THEME_COLORS } from "@/lib/theme";
 
 const STORAGE_KEY = "theme";
 const REVEAL_MS = 900;
@@ -22,6 +23,13 @@ function applyTheme(dark: boolean) {
 export function ThemeToggle() {
   const dark = useSyncExternalStore(subscribe, isDarkNow, () => false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // The layout's theme-color tags follow the system theme; point them at the in-app choice so
+  // the browser / status bar matches the page.
+  useEffect(() => {
+    const color = dark ? THEME_COLORS.dark : THEME_COLORS.light;
+    document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
+  }, [dark]);
 
   async function toggle() {
     const next = !dark;

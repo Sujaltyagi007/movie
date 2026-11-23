@@ -6,7 +6,6 @@ export type Media = {
   title: string; overview: string;
   rating: number; date: string; genreIds: number[];
   posterPath: string | null; backdropPath: string | null;
-  /** Streaming services in the user's region — only filled in where cards show them (search). */
   providers?: { id: number; name: string; logoPath: string | null }[];
 };
 
@@ -32,13 +31,15 @@ export function isListKey<T extends MediaType>(type: T, value: unknown): value i
   return typeof value === "string" && Object.hasOwn(LISTS[type], value);
 }
 
-export function mediaHref(item: Pick<Media, "id" | "mediaType">) {
-  return `/${item.mediaType}/${item.id}`;
-}
+export function mediaHref(item: Pick<Media, "id" | "mediaType">) { return `/${item.mediaType}/${item.id}` }
 
-export function releaseYear(date: string | undefined) {
-  return date ? date.slice(0, 4) : "TBA";
-}
+/** Unique key for a title across movies and TV (ids overlap between the two). */
+export function mediaKey(item: Pick<Media, "id" | "mediaType">) { return `${item.mediaType}-${item.id}` }
+
+/** Streaming services per title, keyed by `mediaKey`. */
+export type ProviderMap = Record<string, NonNullable<Media["providers"]>>;
+
+export function releaseYear(date: string | undefined) { return date ? date.slice(0, 4) : "TBA" }
 
 export function formatRuntime(minutes: number | null | undefined) {
   if (!minutes) return null;

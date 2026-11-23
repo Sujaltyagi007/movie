@@ -1,8 +1,3 @@
-/**
- * Links that open a title on a streaming / rental service. TMDB doesn't provide per-service deep
- * links (only one JustWatch-backed page per title), so we use each service's own search page with
- * the title; anything unknown falls back to TMDB's "where to watch" page.
- */
 const SEARCH_URLS: [RegExp, (q: string) => string][] = [
   [/^netflix/i, (q) => `https://www.netflix.com/search?q=${q}`],
   [/^amazon prime video|^prime video/i, (q) => `https://www.primevideo.com/search/ref=atv_nb_sug?phrase=${q}`],

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      hls.js:
+        specifier: ^1.7.4
+        version: 1.7.4
       lucide-react:
         specifier: ^1.73.0
         version: 1.73.0(@types/react@19.3.0)(react@19.3.0)
@@ -1249,6 +1252,9 @@ packages:
 
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
+
+  hls.js@1.7.4:
+    resolution: {integrity: sha512-3GlxGdPvT2YHvQYOt+yOzT/DEior/qJVNIylHA77kgeoBTdQQqi70GwefNEUmHQeNGyjC8U62+bruqW/Tpm+tg==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -3285,6 +3291,8 @@ snapshots:
   hermes-parser@0.25.1:
     dependencies:
       hermes-estree: 0.25.1
+
+  hls.js@1.7.4: {}
 
   ignore@5.3.2: {}
 

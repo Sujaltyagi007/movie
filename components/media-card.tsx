@@ -5,7 +5,6 @@ import { imageUrl, mediaHref, releaseYear, type Media } from "@/lib/catalog";
 
 const MAX_BADGES = 3;
 
-/** Logos of the services a title streams on, along the bottom of the poster. */
 function ProviderBadges({ providers }: { providers: NonNullable<Media["providers"]> }) {
   const shown = providers.slice(0, MAX_BADGES);
   const extra = providers.length - shown.length;

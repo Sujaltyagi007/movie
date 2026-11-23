@@ -1,13 +1,19 @@
 import Image from "next/image";
-import { Suspense } from "react";
-import { getTv } from "@/lib/tmdb";
 import type { Metadata } from "next";
+import { Fragment, Suspense } from "react";
 import { notFound } from "next/navigation";
+import { TvEpisodePlay } from "@/features/player";
 import { MediaRow } from "@/components/media-row";
+import { getPrerenderIds, getTv } from "@/lib/tmdb";
 import { CalendarClock, Clock, Layers, Radio } from "lucide-react";
 import { formatRuntime, imageUrl, releaseYear } from "@/lib/catalog";
-import { TvEpisodePlay } from "@/components/tv-episode-play";
 import { BackLink, CastRow, DetailHero, DetailSkeleton, Fact, Overview, SeasonsRow, WatchProviders } from "@/components/detail";
+
+const PRERENDER_COUNT = 30;
+
+export function generateStaticParams() {
+  return getPrerenderIds("tv", PRERENDER_COUNT);
+}
 
 export async function generateMetadata({ params }: PageProps<"/tv/[id]">): Promise<Metadata> {
   const show = await getTv((await params).id);
@@ -54,25 +60,16 @@ async function TvDetail({ params }: Pick<PageProps<"/tv/[id]">, "params">) {
   ];
 
   const episodeActions = (
-    <TvEpisodePlay
-      id={show.id}
-      imdbId={show.imdbId}
-      title={show.title}
-      seasons={show.seasons}
-      trailerKey={show.trailerKey}
-      trailers={show.trailers}
-    />
+    <TvEpisodePlay id={show.id} imdbId={show.imdbId} title={show.title} seasons={show.seasons} trailerKey={show.trailerKey} trailers={show.trailers} />
   );
 
   return (
-    <>
+    <Fragment>
       <DetailHero details={show} facts={facts} actions={episodeActions}>
         {(show.creators.length > 0 || show.networks.length > 0) && (
           <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-white/75">
             {show.creators.length > 0 && (
-              <p>
-                Created by <span className="font-medium text-white">{show.creators.join(", ")}</span>
-              </p>
+              <p> Created by <span className="font-medium text-white">{show.creators.join(", ")}</span> </p>
             )}
             {show.networks.length > 0 && (
               <ul className="flex items-center gap-2">
@@ -98,6 +95,6 @@ async function TvDetail({ params }: Pick<PageProps<"/tv/[id]">, "params">) {
       <SeasonsRow seasons={show.seasons} />
       <CastRow cast={show.cast} />
       <MediaRow title="More like this" items={show.related} />
-    </>
+    </Fragment>
   );
 }

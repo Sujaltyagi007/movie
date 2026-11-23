@@ -2,9 +2,9 @@
 import { flushSync } from "react-dom";
 import { Languages, Play, X } from "lucide-react";
 import type { Trailer } from "@/lib/tmdb";
-import { useHeroPlayer } from "@/components/hero-player";
+import { useHeroPlayer } from "@/features/player/components/hero-player";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { pickInitialVersion, setPreferredVideoLanguage, VideoLanguageSelect, type VideoVersion } from "@/components/video-language-select";
+import { pickInitialVersion, setPreferredVideoLanguage, VideoLanguageSelect, type VideoVersion } from "@/features/player/components/video-language-select";
 
 const VARIANTS = {
   primary: "bg-white text-night shadow-lg hover:bg-white/90",
@@ -15,21 +15,12 @@ type LockableOrientation = ScreenOrientation & { lock?: (orientation: string) =>
 
 const isTouchDevice = () => window.matchMedia("(pointer: coarse)").matches;
 
-// `hl` puts YouTube's own player UI (and its caption menu) in the trailer's language.
-const embedUrl = (key: string, language = "") =>
-  `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&rel=0&modestbranding=1&playsinline=1${language ? `&hl=${language}` : ""}`;
+const embedUrl = (key: string, language = "") => `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&rel=0&modestbranding=1&playsinline=1${language ? `&hl=${language}` : ""}`;
 
 const toVersions = (trailers: Trailer[]): VideoVersion[] =>
   trailers.map((t) => ({ id: t.language || "original", language: t.language, src: embedUrl(t.key, t.language) }));
 
-export function TrailerButton({ videoKey, trailers, title, variant = "primary", className = "" }: {
-  videoKey: string;
-  /** The trailer in each available language; the player then offers a language picker. */
-  trailers?: Trailer[];
-  title: string;
-  variant?: keyof typeof VARIANTS;
-  className?: string;
-}) {
+export function TrailerButton({ videoKey, trailers, title, variant = "primary", className = "" }: { videoKey: string; trailers?: Trailer[]; title: string; variant?: keyof typeof VARIANTS; className?: string; }) {
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const wentFullscreen = useRef(false);
@@ -44,7 +35,6 @@ export function TrailerButton({ videoKey, trailers, title, variant = "primary", 
   }
 
   function openPlayer() {
-    // Start in the language the user picked last time, when this title has it.
     const initial = pickInitialVersion(versions) ?? versions[0];
     setVersionId(initial.id);
     if (hero) {

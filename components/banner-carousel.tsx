@@ -154,7 +154,7 @@ export function BannerCarousel({ slides }: { slides: BannerSlide[] }) {
                 <li key={slides[i].id}>
                   <button type="button" onClick={() => goTo(i)} aria-label={`Show ${slides[i].title}`} className="group block w-32 text-left">
                     <span className="relative block aspect-video overflow-hidden rounded-xl ring-1 ring-white/20 transition group-hover:ring-white/60">
-                      <Image src={slides[i].thumb} alt="" fill sizes="128px" quality={90} className="object-cover transition duration-500 group-hover:scale-105" />
+                      <Image src={slides[i].thumb} alt="" fill sizes="128px" quality={75} className="object-cover transition duration-500 group-hover:scale-105" />
                     </span>
                     <span className="mt-1.5 block truncate text-xs text-white/75 group-hover:text-white">{slides[i].title}</span>
                   </button>
